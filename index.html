@@ -1,198 +1,9 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Quiz Party - Controle do Jogador</title>
-    <!-- Supabase JS CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Poppins', sans-serif;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        body {
-            background-color: #0f0c20;
-            color: #ffffff;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 16px;
-            overflow-x: hidden;
-        }
-
-        .app-container {
-            width: 100%;
-            max-width: 450px;
-            background: #1a1532;
-            border-radius: 24px;
-            padding: 24px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            border: 1px solid rgba(255,255,255,0.08);
-            position: relative;
-        }
-
-        h1, h2, h3 { text-align: center; font-weight: 700; }
-        .title { color: #00f2fe; font-size: 24px; margin-bottom: 20px; text-shadow: 0 0 10px rgba(0,242,254,0.3); }
-
-        #screen-login { display: flex; flex-direction: column; gap: 16px; }
-        .avatar-upload { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-        .avatar-preview {
-            width: 90px; height: 90px; border-radius: 50%; background: #282147;
-            border: 3px solid #7928ca; display: flex; align-items: center;
-            justify-content: center; overflow: hidden; font-size: 32px; color: #8a817c; cursor: pointer;
-        }
-        .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
-        input[type="file"] { display: none; }
-        .input-group { display: flex; flex-direction: column; gap: 6px; }
-        label { font-size: 13px; color: #a0a0c0; font-weight: 600; }
-        input[type="text"] {
-            width: 100%; padding: 14px 18px; border-radius: 12px; border: 2px solid #2d264f;
-            background: #120e24; color: #fff; font-size: 16px; outline: none; transition: border-color 0.2s;
-        }
-        input[type="text"]:focus { border-color: #00f2fe; }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #7928ca, #ff0080); color: white; border: none;
-            padding: 16px; border-radius: 14px; font-size: 16px; font-weight: 700; cursor: pointer;
-            box-shadow: 0 4px 15px rgba(255,0,128,0.3); transition: transform 0.1s, opacity 0.2s; margin-top: 10px;
-        }
-        .btn-primary:active { transform: scale(0.98); }
-        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        #screen-game { display: none; flex-direction: column; gap: 16px; }
-        .player-header { display: flex; align-items: center; justify-content: space-between; background: #231b42; padding: 12px 16px; border-radius: 16px; }
-        .player-info { display: flex; align-items: center; gap: 12px; }
-        .player-avatar-small { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #00f2fe; }
-        .player-name { font-weight: 700; font-size: 15px; }
-
-        .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-        .status-waiting { background: rgba(255,193,7,0.2); color: #ffc107; }
-        .status-active { background: rgba(0,242,254,0.2); color: #00f2fe; }
-        .status-locked { background: rgba(255,75,75,0.2); color: #ff4b4b; }
-
-        .buffs-section { background: #120e24; padding: 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); }
-        .buffs-title { font-size: 12px; color: #a0a0c0; margin-bottom: 8px; display: flex; justify-content: space-between; }
-        .buffs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-        .buff-card {
-            background: #221a3f; border: 1px solid #362a5f; border-radius: 10px; padding: 8px;
-            text-align: center; font-size: 11px; cursor: pointer; transition: all 0.2s;
-            display: flex; flex-direction: column; align-items: center; gap: 4px;
-        }
-        .buff-card.selected { border-color: #00f2fe; background: rgba(0,242,254,0.15); box-shadow: 0 0 10px rgba(0,242,254,0.3); }
-        .buff-card.used { opacity: 0.3; cursor: not-allowed; border-color: #444; }
-        .buff-icon { font-size: 18px; }
-
-        #target-select-container { display: none; margin-top: 8px; }
-        select { width: 100%; padding: 8px; border-radius: 8px; background: #221a3f; color: #fff; border: 1px solid #00f2fe; font-size: 12px; }
-
-        .answers-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-        .btn-answer {
-            width: 100%; padding: 18px; border-radius: 16px; border: none; color: white; font-size: 20px;
-            font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: transform 0.1s, opacity 0.2s;
-        }
-        .btn-answer:active { transform: scale(0.97); }
-        .btn-answer:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(80%); }
-        .btn-answer.hidden-5050 { visibility: hidden; pointer-events: none; }
-
-        .btn-a { background: linear-gradient(135deg, #ff416c, #ff4b2b); }
-        .btn-b { background: linear-gradient(135deg, #2193b0, #6dd5ed); }
-        .btn-c { background: linear-gradient(135deg, #f7971e, #ffd200); color: #111; }
-        .btn-d { background: linear-gradient(135deg, #11998e, #38ef7d); }
-        .btn-e { background: linear-gradient(135deg, #8e2de2, #4a00e0); }
-
-        .round-status { text-align: center; padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.05); font-size: 14px; color: #d0d0f0; }
-    </style>
-</head>
-<body>
-
-    <div class="app-container" id="appContainer">
-        <!-- LOGIN -->
-        <div id="screen-login">
-            <h1 class="title">QUIZ PARTY 🎮</h1>
-            <h2>Criar Perfil</h2>
-            <div class="avatar-upload">
-                <div class="avatar-preview" onclick="document.getElementById('file-avatar').click()">
-                    <span id="avatar-placeholder">📷</span>
-                    <img id="avatar-img" style="display:none;" alt="Preview" />
-                </div>
-                <label>Toque para escolher sua foto</label>
-                <input type="file" id="file-avatar" accept="image/*" onchange="previewAvatar(event)">
-            </div>
-            <div class="input-group">
-                <label>Seu Nome ou Apelido</label>
-                <input type="text" id="input-name" placeholder="Ex: Joãozinho123" maxlength="15">
-            </div>
-            <button class="btn-primary" id="btn-join" onclick="entrarNoJogo()">ENTRAR NO JOGO</button>
-        </div>
-
-        <!-- JOGO -->
-        <div id="screen-game">
-            <div class="player-header">
-                <div class="player-info">
-                    <img id="p-avatar" class="player-avatar-small" src="" alt="Avatar">
-                    <span id="p-name" class="player-name">--</span>
-                </div>
-                <span id="p-status" class="status-badge status-waiting">Aguardando</span>
-            </div>
-
-            <div class="round-status" id="round-info">Aguardando o host iniciar a próxima pergunta...</div>
-
-            <div class="buffs-section">
-                <div class="buffs-title">
-                    <span>SEUS BUFFS</span>
-                    <span id="buff-active-label" style="color:#00f2fe; font-weight:700;">Nenhum</span>
-                </div>
-                <div class="buffs-grid">
-                    <div class="buff-card" id="buff-dobro" onclick="toggleBuff('dobro_ou_nada', 'Dobro ou Nada ⚡')">
-                        <span class="buff-icon">⚡</span><span>Dobro/Nada</span>
-                    </div>
-                    <div class="buff-card" id="buff-escudo" onclick="toggleBuff('escudo', 'Escudo 🛡️')">
-                        <span class="buff-icon">🛡️</span><span>Escudo</span>
-                    </div>
-                    <div class="buff-card" id="buff-vampiro" onclick="toggleBuff('vampiro', 'Vampiro 🧛')">
-                        <span class="buff-icon">🧛</span><span>Vampiro</span>
-                    </div>
-                    <div class="buff-card" id="buff-maria" onclick="toggleBuff('maria', 'Maria 👯')">
-                        <span class="buff-icon">👯</span><span>Copiar</span>
-                    </div>
-                    <div class="buff-card" id="buff-chute" onclick="usarChuteCego()">
-                        <span class="buff-icon">🎲</span><span>Chute Cego</span>
-                    </div>
-                    <div class="buff-card" id="buff-5050" onclick="usar5050()">
-                        <span class="buff-icon">✂️</span><span>50 / 50</span>
-                    </div>
-                </div>
-                <div id="target-select-container">
-                    <label>Escolha quem você quer copiar:</label>
-                    <select id="select-target-player"></select>
-                </div>
-            </div>
-
-            <div class="answers-grid" id="answersGrid">
-                <button class="btn-answer btn-a" onclick="enviarResposta('A')"><span>A</span> <span>&gt;</span></button>
-                <button class="btn-answer btn-b" onclick="enviarResposta('B')"><span>B</span> <span>&gt;</span></button>
-                <button class="btn-answer btn-c" onclick="enviarResposta('C')"><span>C</span> <span>&gt;</span></button>
-                <button class="btn-answer btn-d" onclick="enviarResposta('D')"><span>D</span> <span>&gt;</span></button>
-                <button class="btn-answer btn-e" onclick="enviarResposta('E')"><span>E</span> <span>&gt;</span></button>
-            </div>
-        </div>
-    </div>
-
-    <script>
+<script>
         const SUPABASE_URL = "https://azqtgvonviekeivefqde.supabase.co";
         const SUPABASE_KEY = "sb_publishable_U-C_YPVKJL48zEPdaQQGeg_nrE_F3Jm";
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        // Cria a conexão utilizando o cliente do Supabase da CDN
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let jogadorAtual = null;
         let perguntaAtualId = null;
@@ -230,19 +41,19 @@
 
                 if (fileFoto) {
                     const fileName = `${Date.now()}_${nomeInput.toLowerCase().replace(/[^a-z0-9]/g, '')}.jpg`;
-                    const { error: uploadError } = await supabase.storage
+                    const { error: uploadError } = await supabaseClient.storage
                         .from('fotos_perfil')
                         .upload(fileName, fileFoto);
 
                     if (!uploadError) {
-                        const { data: publicUrlData } = supabase.storage
+                        const { data: publicUrlData } = supabaseClient.storage
                             .from('fotos_perfil')
                             .getPublicUrl(fileName);
                         fotoUrl = publicUrlData.publicUrl;
                     }
                 }
 
-                const { data: newPlayer, error: playerError } = await supabase
+                const { data: newPlayer, error: playerError } = await supabaseClient
                     .from('jogadores')
                     .insert([{ nome: nomeInput, foto_url: fotoUrl }])
                     .select()
@@ -270,14 +81,14 @@
         }
 
         function escutarEstadoPartida() {
-            supabase
+            supabaseClient
                 .channel('realtime_partida')
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'partida_estado', id: 1 }, payload => {
                     atualizarEstadoLocal(payload.new);
                 })
                 .subscribe();
 
-            supabase.from('partida_estado').select('*').eq('id', 1).single().then(({ data }) => {
+            supabaseClient.from('partida_estado').select('*').eq('id', 1).single().then(({ data }) => {
                 if (data) atualizarEstadoLocal(data);
             });
         }
@@ -383,7 +194,7 @@
                 document.getElementById('buff-' + buffSelecionado).classList.add('used');
             }
 
-            await supabase.from('respostas_rodada').insert([{
+            await supabaseClient.from('respostas_rodada').insert([{
                 jogador_id: jogadorAtual.id,
                 pergunta_id: perguntaAtualId || 'Q_ATUAL',
                 alternativa: alternativa,
@@ -392,7 +203,7 @@
         }
 
         async function carregarOutrosJogadores() {
-            const { data } = await supabase.from('jogadores').select('id, nome');
+            const { data } = await supabaseClient.from('jogadores').select('id, nome');
             if (data) {
                 const select = document.getElementById('select-target-player');
                 select.innerHTML = '';
@@ -405,5 +216,3 @@
             }
         }
     </script>
-</body>
-</html>
