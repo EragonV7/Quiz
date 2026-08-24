@@ -80,11 +80,13 @@
         .player-avatar-small { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; object-position: center; border: 2px solid #00f2fe; }
         .player-name { font-weight: 700; font-size: 15px; }
 
-        .btn-logout { 
-            background: #2a204a; border: 1px solid rgba(255,255,255,0.1); color: #ff4b4b; 
-            padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: 6px; 
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+        .btn-header-small { 
+            background: #2a204a; border: 1px solid rgba(255,255,255,0.1); color: #fff; 
+            padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; 
         }
-        .btn-logout:active { transform: scale(0.95); }
+        .btn-header-small:active { transform: scale(0.95); }
+        .btn-logout { color: #ff4b4b; }
 
         .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
         .status-waiting { background: rgba(255,193,7,0.2); color: #ffc107; }
@@ -100,11 +102,8 @@
             display: flex; flex-direction: column; align-items: center; gap: 4px;
         }
         .buff-card.selected { border-color: #00f2fe; background: rgba(0,242,254,0.15); box-shadow: 0 0 10px rgba(0,242,254,0.3); }
-        .buff-card.used { opacity: 0.3; cursor: not-allowed; border-color: #444; }
+        .buff-card.used { opacity: 0.3; cursor: not-allowed; border-color: #444; filter: grayscale(100%); }
         .buff-icon { font-size: 18px; }
-
-        #target-select-container { display: none; margin-top: 8px; }
-        select { width: 100%; padding: 8px; border-radius: 8px; background: #221a3f; color: #fff; border: 1px solid #00f2fe; font-size: 12px; }
 
         .answers-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
         .btn-answer {
@@ -114,7 +113,7 @@
         }
         .btn-answer:active { transform: scale(0.97); }
         .btn-answer:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(80%); }
-        .btn-answer.hidden-5050 { visibility: hidden; pointer-events: none; }
+        .btn-answer.hidden-5050 { display: none; }
 
         .btn-a { background: linear-gradient(135deg, #ff416c, #ff4b2b); }
         .btn-b { background: linear-gradient(135deg, #2193b0, #6dd5ed); }
@@ -123,6 +122,33 @@
         .btn-e { background: linear-gradient(135deg, #8e2de2, #4a00e0); }
 
         .round-status { text-align: center; padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.05); font-size: 14px; color: #d0d0f0; }
+
+        /* MODAL DE CONFIRMAÇÃO DE BUFF */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999; justify-content: center; align-items: center; padding: 20px; }
+        .modal-box { background: #1a1532; padding: 24px; border-radius: 24px; width: 100%; max-width: 350px; border: 2px solid #362a5f; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.9); }
+        .modal-icon { font-size: 48px; margin-bottom: 10px; }
+        .modal-title { color: #00f2fe; margin-bottom: 8px; font-size: 22px; }
+        .modal-desc { font-size: 14px; color: #d0d0f0; margin-bottom: 20px; line-height: 1.4; }
+        .modal-target { margin-bottom: 20px; text-align: left; }
+        .modal-target select { width: 100%; padding: 12px; border-radius: 12px; background: #231b42; color: #fff; border: 1px solid #00f2fe; font-size: 14px; outline: none; }
+        .modal-actions { display: flex; gap: 10px; }
+        .btn-modal { flex: 1; padding: 14px; border-radius: 12px; font-weight: 700; cursor: pointer; border: none; transition: transform 0.1s; }
+        .btn-modal:active { transform: scale(0.95); }
+        .btn-modal-cancel { background: #2a204a; color: #fff; }
+        .btn-modal-confirm { background: linear-gradient(135deg, #00f2fe, #4facfe); color: #000; }
+
+        /* DRAWER LATERAL (LISTA DE JOGADORES) */
+        .drawer-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 900; }
+        .drawer { position: fixed; top: 0; right: -300px; width: 280px; height: 100%; background: #1a1532; box-shadow: -5px 0 20px rgba(0,0,0,0.7); z-index: 901; transition: right 0.3s ease; padding: 24px; display: flex; flex-direction: column; }
+        .drawer.open { right: 0; }
+        .drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
+        .drawer-close { background: none; border: none; color: white; font-size: 28px; cursor: pointer; }
+        .drawer-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .player-item { display: flex; align-items: center; gap: 12px; padding: 10px; background: #231b42; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); }
+        .player-item img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+        .player-item-info { display: flex; flex-direction: column; }
+        .player-item-name { font-size: 14px; font-weight: 600; }
+        .player-item-badge { font-size: 10px; color: #00f2fe; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -153,9 +179,12 @@
                 <div class="player-info">
                     <img id="p-avatar" class="player-avatar-small" src="" alt="Avatar" onerror="handleImageError(this)">
                     <span id="p-name" class="player-name">--</span>
-                    <button class="btn-logout" onclick="sairDoPerfil()">Sair 🚪</button>
                 </div>
-                <span id="p-status" class="status-badge status-waiting">Aguardando</span>
+                <div class="header-actions">
+                    <span id="p-status" class="status-badge status-waiting">Aguardando</span>
+                    <button class="btn-header-small" onclick="abrirMenuJogadores()">👥</button>
+                    <button class="btn-header-small btn-logout" onclick="sairDoPerfil()">Sair 🚪</button>
+                </div>
             </div>
 
             <div class="round-status" id="round-info">Aguardando o host iniciar a próxima pergunta...</div>
@@ -166,28 +195,24 @@
                     <span id="buff-active-label" style="color:#00f2fe; font-weight:700;">6/6 disponíveis</span>
                 </div>
                 <div class="buffs-grid">
-                    <div class="buff-card" id="buff-dobro" onclick="toggleBuff('dobro_ou_nada', 'Dobro/Nada')">
+                    <div class="buff-card" id="buff-dobro" onclick="abrirModalBuff('dobro')">
                         <span class="buff-icon">⚡</span><span>Dobro/Nada</span>
                     </div>
-                    <div class="buff-card" id="buff-escudo" onclick="toggleBuff('escudo', 'Escudo')">
+                    <div class="buff-card" id="buff-escudo" onclick="abrirModalBuff('escudo')">
                         <span class="buff-icon">🛡️</span><span>Escudo</span>
                     </div>
-                    <div class="buff-card" id="buff-vampiro" onclick="toggleBuff('vampiro', 'Vampiro')">
+                    <div class="buff-card" id="buff-vampiro" onclick="abrirModalBuff('vampiro')">
                         <span class="buff-icon">🧛</span><span>Vampiro</span>
                     </div>
-                    <div class="buff-card" id="buff-maria" onclick="toggleBuff('maria', 'Copiar')">
+                    <div class="buff-card" id="buff-maria" onclick="abrirModalBuff('maria')">
                         <span class="buff-icon">👯</span><span>Copiar</span>
                     </div>
-                    <div class="buff-card" id="buff-chute" onclick="usarChuteCego()">
+                    <div class="buff-card" id="buff-chute" onclick="abrirModalBuff('chute')">
                         <span class="buff-icon">🎲</span><span>Chute Cego</span>
                     </div>
-                    <div class="buff-card" id="buff-5050" onclick="usar5050()">
+                    <div class="buff-card" id="buff-5050" onclick="abrirModalBuff('5050')">
                         <span class="buff-icon">✂️</span><span>50 / 50</span>
                     </div>
-                </div>
-                <div id="target-select-container">
-                    <label>Escolha quem você quer copiar:</label>
-                    <select id="select-target-player"></select>
                 </div>
             </div>
 
@@ -201,6 +226,37 @@
         </div>
     </div>
 
+    <!-- MODAL DE BUFF -->
+    <div class="modal-overlay" id="modalBuffOverlay">
+        <div class="modal-box">
+            <div class="modal-icon" id="modal-icon">⚡</div>
+            <h3 class="modal-title" id="modal-title">Buff</h3>
+            <p class="modal-desc" id="modal-desc">Descrição do buff.</p>
+            
+            <div class="modal-target" id="modal-target-container" style="display:none;">
+                <label style="font-size: 13px; color: #00f2fe; margin-bottom: 6px; display: block; font-weight: 600;">Selecione quem quer afetar:</label>
+                <select id="modal-select-target"></select>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-modal btn-modal-cancel" onclick="fecharModalBuff()">Cancelar</button>
+                <button class="btn-modal btn-modal-confirm" onclick="confirmarBuff()">Usar Buff</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DRAWER DE JOGADORES -->
+    <div class="drawer-overlay" id="drawerOverlay" onclick="fecharMenuJogadores()"></div>
+    <div class="drawer" id="drawerJogadores">
+        <div class="drawer-header">
+            <h3>Jogadores Online</h3>
+            <button class="drawer-close" onclick="fecharMenuJogadores()">&times;</button>
+        </div>
+        <div class="drawer-content" id="lista-jogadores-online">
+            <!-- Lista renderizada via JS -->
+        </div>
+    </div>
+
     <!-- LÓGICA JAVASCRIPT -->
     <script>
         const SUPABASE_URL = "https://azqtgvonviekeivefqde.supabase.co";
@@ -211,14 +267,29 @@
         let jogadorAtual = null;
         let perguntaAtualId = null;
         let statusPartida = 'aguardando_jogadores';
-        let buffSelecionado = null;
+        
+        let buffSelecionado = null; // O buff que foi confirmado para a rodada atual
+        let alvoSelecionado = null; // O alvo confirmado para a rodada atual
+        let buffEmEdicao = null;    // O buff que está aberto no Modal no momento
+        
         let respostaEnviada = false;
         let fileFoto = null;
         let canalRealtime = null;
         let buffsUsados = new Set();
         const TOTAL_BUFFS = 6;
 
-        // Gera avatar com a inicial localmente em SVG
+        const DICIONARIO_BUFFS = {
+            'dobro': { icon: '⚡', nome: 'Dobro ou Nada', desc: 'Se você acertar ganha o DOBRO de pontos! Se errar, perde o dobro.', precisaAlvo: false },
+            'escudo': { icon: '🛡️', nome: 'Escudo Protetor', desc: 'Se você errar a questão ou for atacado por um vampiro, não perde nenhum ponto.', precisaAlvo: false },
+            'vampiro': { icon: '🧛', nome: 'Ataque Vampiro', desc: 'Se você acertar a resposta, vai sugar pontos do jogador que você escolher.', precisaAlvo: true },
+            'maria': { icon: '👯', nome: 'Maria Vai Com As Outras', desc: 'Não sabe a resposta? Copie automaticamente a opção que o alvo escolhido marcar.', precisaAlvo: true },
+            'chute': { icon: '🎲', nome: 'Chute Cego', desc: 'O sistema escolherá uma resposta totalmente aleatória para você e enviará imediatamente.', precisaAlvo: false },
+            '5050': { icon: '✂️', nome: '50 / 50', desc: 'O sistema removerá duas opções erradas da tela para facilitar sua escolha.', precisaAlvo: false }
+        };
+
+        // =========================================
+        // INICIALIZAÇÃO & LOGIN
+        // =========================================
         function getAvatarFallback(nome) {
             const inicial = (nome || '?').charAt(0).toUpperCase();
             const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
@@ -229,23 +300,15 @@
         }
 
         function handleImageError(img) {
-            if (jogadorAtual && jogadorAtual.nome) {
-                img.src = getAvatarFallback(jogadorAtual.nome);
-            }
+            if (jogadorAtual && jogadorAtual.nome) img.src = getAvatarFallback(jogadorAtual.nome);
         }
 
-        // Tenta reconectar automaticamente se houver sessão salva
         window.addEventListener('DOMContentLoaded', async () => {
             const sessaoSalva = localStorage.getItem('quiz_party_jogador');
             if (sessaoSalva && supabaseClient) {
                 try {
                     const playerLocal = JSON.parse(sessaoSalva);
-                    const { data, error } = await supabaseClient
-                        .from('jogadores')
-                        .select('*')
-                        .eq('id', playerLocal.id)
-                        .single();
-
+                    const { data, error } = await supabaseClient.from('jogadores').select('*').eq('id', playerLocal.id).single();
                     if (data && !error) {
                         jogadorAtual = data;
                         iniciarTelaJogo();
@@ -273,82 +336,47 @@
         }
 
         async function entrarNoJogo() {
-            if (!supabaseClient) return alert("Erro de conexão com o servidor. Recarregue a página.");
-
+            if (!supabaseClient) return alert("Erro de conexão. Recarregue a página.");
             const nomeInput = document.getElementById('input-name').value.trim();
             const btnJoin = document.getElementById('btn-join');
-
-            if (!nomeInput) return alert("Por favor, digite seu nome!");
-
+            if (!nomeInput) return alert("Digite seu nome!");
             btnJoin.disabled = true;
             btnJoin.innerText = "ENTRANDO...";
 
             try {
-                // 1. Busca jogador com esse nome no Supabase
-                const { data: existente } = await supabaseClient
-                    .from('jogadores')
-                    .select('*')
-                    .ilike('nome', nomeInput)
-                    .maybeSingle();
+                const { data: existente } = await supabaseClient.from('jogadores').select('*').ilike('nome', nomeInput).maybeSingle();
+                let fotoUrl = (existente && existente.foto_url && !existente.foto_url.includes('placeholder')) ? existente.foto_url : getAvatarFallback(nomeInput);
 
-                let fotoUrl = (existente && existente.foto_url && !existente.foto_url.includes('placeholder')) 
-                    ? existente.foto_url 
-                    : getAvatarFallback(nomeInput);
-
-                // 2. Se o usuário enviou uma imagem nova
                 if (fileFoto) {
                     const fileName = `${Date.now()}_${nomeInput.toLowerCase().replace(/[^a-z0-9]/g, '')}.jpg`;
-                    const { error: uploadError } = await supabaseClient.storage
-                        .from('fotos_perfil')
-                        .upload(fileName, fileFoto);
-
+                    const { error: uploadError } = await supabaseClient.storage.from('fotos_perfil').upload(fileName, fileFoto);
                     if (!uploadError) {
-                        const { data: publicUrlData } = supabaseClient.storage
-                            .from('fotos_perfil')
-                            .getPublicUrl(fileName);
-                        fotoUrl = publicUrlData.publicUrl;
+                        const { data: pUrl } = supabaseClient.storage.from('fotos_perfil').getPublicUrl(fileName);
+                        fotoUrl = pUrl.publicUrl;
                     }
                 }
 
                 let playerFinal = null;
-
                 if (existente) {
-                    const { data: updatedPlayer, error: updateError } = await supabaseClient
-                        .from('jogadores')
-                        .update({ foto_url: fotoUrl })
-                        .eq('id', existente.id)
-                        .select()
-                        .single();
-
-                    if (updateError) throw updateError;
-                    playerFinal = updatedPlayer;
+                    const { data: updated } = await supabaseClient.from('jogadores').update({ foto_url: fotoUrl }).eq('id', existente.id).select().single();
+                    playerFinal = updated;
                 } else {
-                    const { data: newPlayer, error: playerError } = await supabaseClient
-                        .from('jogadores')
-                        .insert([{ nome: nomeInput, foto_url: fotoUrl }])
-                        .select()
-                        .single();
-
-                    if (playerError) throw playerError;
+                    const { data: newPlayer } = await supabaseClient.from('jogadores').insert([{ nome: nomeInput, foto_url: fotoUrl }]).select().single();
                     playerFinal = newPlayer;
                 }
 
                 jogadorAtual = playerFinal;
                 localStorage.setItem('quiz_party_jogador', JSON.stringify(playerFinal));
-
                 iniciarTelaJogo();
             } catch (err) {
-                alert("Erro ao entrar no jogo: " + err.message);
+                alert("Erro: " + err.message);
                 btnJoin.disabled = false;
                 btnJoin.innerText = "ENTRAR NO JOGO";
             }
         }
 
         function sairDoPerfil() {
-            if (canalRealtime) {
-                supabaseClient.removeChannel(canalRealtime);
-                canalRealtime = null;
-            }
+            if (canalRealtime) { supabaseClient.removeChannel(canalRealtime); canalRealtime = null; }
             localStorage.removeItem('quiz_party_jogador');
             jogadorAtual = null;
             document.getElementById('screen-game').style.display = 'none';
@@ -361,76 +389,33 @@
             fileFoto = null;
         }
 
+        // =========================================
+        // JOGO & REALTIME
+        // =========================================
         function iniciarTelaJogo() {
             document.getElementById('screen-login').style.display = 'none';
             document.getElementById('screen-game').style.display = 'flex';
             document.getElementById('p-name').innerText = jogadorAtual.nome;
-            
-            const avatarImg = document.getElementById('p-avatar');
-            avatarImg.src = jogadorAtual.foto_url || getAvatarFallback(jogadorAtual.nome);
+            document.getElementById('p-avatar').src = jogadorAtual.foto_url || getAvatarFallback(jogadorAtual.nome);
 
             atualizarContadorBuffs();
             escutarEstadoPartida();
-            carregarOutrosJogadores();
         }
 
-        function atualizarContadorBuffs() {
-            const disponiveis = TOTAL_BUFFS - buffsUsados.size;
-            const label = document.getElementById('buff-active-label');
-            
-            if (buffSelecionado) {
-                label.innerText = `Ativo! (${disponiveis}/${TOTAL_BUFFS} rest.)`;
-            } else {
-                label.innerText = `${disponiveis}/${TOTAL_BUFFS} disponíveis`;
-            }
-        }
-
-        // =========================================
-        // CORREÇÃO DO REALTIME 
-        // =========================================
         function escutarEstadoPartida() {
-            // Remove o canal anterior se já estiver registrado para evitar conflitos
-            if (canalRealtime) {
-                supabaseClient.removeChannel(canalRealtime);
-                canalRealtime = null;
-            }
-
-            // AQUI FOI CORRIGIDO: Retirado o 'id: 1' solto que quebrava o Realtime no Supabase v2
-            canalRealtime = supabaseClient
-                .channel('realtime_partida_' + Date.now())
+            if (canalRealtime) { supabaseClient.removeChannel(canalRealtime); canalRealtime = null; }
+            canalRealtime = supabaseClient.channel('realtime_partida_' + Date.now())
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'partida_estado' }, payload => {
-                    console.log("Status recebido do Host:", payload.new);
                     atualizarEstadoLocal(payload.new);
-                })
-                .subscribe();
-
-            // Busca o estado inicial
+                }).subscribe();
+            
             supabaseClient.from('partida_estado').select('*').eq('id', 1).single().then(({ data }) => {
                 if (data) atualizarEstadoLocal(data);
             });
         }
 
-        async function verificarRespostaJaEnviada() {
-            if (!jogadorAtual || !perguntaAtualId) return;
-
-            const { data } = await supabaseClient
-                .from('respostas_rodada')
-                .select('alternativa')
-                .eq('jogador_id', jogadorAtual.id)
-                .eq('pergunta_id', perguntaAtualId)
-                .maybeSingle();
-
-            if (data) {
-                respostaEnviada = true;
-                setButtonsEnabled(false);
-                document.getElementById('round-info').innerText = `Resposta já enviada [ ${data.alternativa} ]!`;
-            }
-        }
-
         async function atualizarEstadoLocal(estado) {
-            // Previne falhas se o banco retornar vazio
             if (!estado) return;
-
             statusPartida = estado.status;
             perguntaAtualId = estado.pergunta_atual_id;
 
@@ -439,31 +424,31 @@
 
             if (estado.status === 'aceitando_respostas') {
                 if (perguntaAtualId !== window.perguntaAnteriorId) {
+                    // RESET DA RODADA NOVA
                     respostaEnviada = false;
                     buffSelecionado = null;
+                    alvoSelecionado = null;
                     atualizarContadorBuffs();
                     resetVisualBotoes();
                 }
                 window.perguntaAnteriorId = perguntaAtualId;
+                badge.className = "status-badge status-active"; badge.innerText = "VALENDO";
 
-                badge.className = "status-badge status-active";
-                badge.innerText = "VALENDO";
-
-                await verificarRespostaJaEnviada();
-
-                if (!respostaEnviada) {
+                // Verifica se jogou offline
+                const { data } = await supabaseClient.from('respostas_rodada').select('alternativa').eq('jogador_id', jogadorAtual.id).eq('pergunta_id', perguntaAtualId).maybeSingle();
+                if (data) {
+                    respostaEnviada = true;
+                    setButtonsEnabled(false);
+                    info.innerText = `Resposta já enviada [ ${data.alternativa} ]!`;
+                } else {
                     info.innerText = "Escolha sua opção:";
                     setButtonsEnabled(true);
                 }
-            } else if (estado.status === 'tempo_esgotado') {
-                badge.className = "status-badge status-locked";
-                badge.innerText = "TRAVADO";
-                info.innerText = "Tempo encerrado!";
-                setButtonsEnabled(false);
             } else {
-                badge.className = "status-badge status-waiting";
-                badge.innerText = "AGUARDE";
-                info.innerText = "Aguardando próxima pergunta...";
+                fecharModalBuff(); // Força fechar modal se acabar o tempo
+                badge.className = (estado.status === 'tempo_esgotado') ? "status-badge status-locked" : "status-badge status-waiting";
+                badge.innerText = (estado.status === 'tempo_esgotado') ? "TRAVADO" : "AGUARDE";
+                info.innerText = (estado.status === 'tempo_esgotado') ? "Tempo encerrado!" : "Aguardando próxima pergunta...";
                 setButtonsEnabled(false);
             }
         }
@@ -475,40 +460,96 @@
         }
 
         function resetVisualBotoes() {
-            document.querySelectorAll('.btn-answer').forEach(b => {
-                b.classList.remove('hidden-5050');
-                b.disabled = false;
+            document.querySelectorAll('.btn-answer').forEach(b => { b.classList.remove('hidden-5050'); b.disabled = false; });
+            document.querySelectorAll('.buff-card').forEach(c => {
+                if (!buffsUsados.has(c.id.replace('buff-', ''))) c.classList.remove('selected');
             });
-            document.querySelectorAll('.buff-card').forEach(c => c.classList.remove('selected'));
         }
 
-        function toggleBuff(buffKey, buffNome) {
-            if (buffsUsados.has(buffKey) || respostaEnviada || statusPartida !== 'aceitando_respostas') return;
+        function atualizarContadorBuffs() {
+            const disponiveis = TOTAL_BUFFS - buffsUsados.size;
+            const label = document.getElementById('buff-active-label');
+            if (buffSelecionado) label.innerText = `Buff ativo na rodada!`;
+            else label.innerText = `${disponiveis}/${TOTAL_BUFFS} disponíveis`;
+        }
 
-            if (buffSelecionado === buffKey) {
-                buffSelecionado = null;
-                document.getElementById('buff-' + buffKey).classList.remove('selected');
-                document.getElementById('target-select-container').style.display = 'none';
+        // =========================================
+        // SISTEMA DE BUFFS (MODAL & CONFIRMAÇÃO)
+        // =========================================
+        async function abrirModalBuff(buffKey) {
+            if (respostaEnviada || statusPartida !== 'aceitando_respostas') return;
+            if (buffsUsados.has(buffKey)) return; // Já usou este buff no jogo
+            if (buffSelecionado) return alert("Você já escolheu um buff para usar nesta rodada! Só é permitido 1 por rodada.");
+
+            buffEmEdicao = buffKey;
+            const info = DICIONARIO_BUFFS[buffKey];
+
+            document.getElementById('modal-icon').innerText = info.icon;
+            document.getElementById('modal-title').innerText = info.nome;
+            document.getElementById('modal-desc').innerText = info.desc;
+
+            const targetContainer = document.getElementById('modal-target-container');
+            const selectTarget = document.getElementById('modal-select-target');
+            
+            if (info.precisaAlvo) {
+                targetContainer.style.display = 'block';
+                selectTarget.innerHTML = '<option value="">Carregando alvos...</option>';
+                // Busca jogadores na hora
+                const { data } = await supabaseClient.from('jogadores').select('id, nome').order('nome');
+                selectTarget.innerHTML = '<option value="" disabled selected>-- Selecione um jogador --</option>';
+                if (data) {
+                    data.filter(j => j.id !== jogadorAtual.id).forEach(j => {
+                        selectTarget.innerHTML += `<option value="${j.id}">${j.nome}</option>`;
+                    });
+                }
             } else {
-                document.querySelectorAll('.buff-card').forEach(c => c.classList.remove('selected'));
-                buffSelecionado = buffKey;
-                document.getElementById('buff-' + buffKey).classList.add('selected');
-                document.getElementById('target-select-container').style.display = (buffKey === 'maria') ? 'block' : 'none';
+                targetContainer.style.display = 'none';
             }
-            atualizarContadorBuffs();
+
+            document.getElementById('modalBuffOverlay').style.display = 'flex';
         }
 
-        function usarChuteCego() {
-            if (respostaEnviada || statusPartida !== 'aceitando_respostas' || buffsUsados.has('chute')) return;
-            const opes = ['A', 'B', 'C', 'D', 'E'];
-            buffsUsados.add('chute');
-            document.getElementById('buff-chute').classList.add('used');
+        function fecharModalBuff() {
+            buffEmEdicao = null;
+            document.getElementById('modalBuffOverlay').style.display = 'none';
+        }
+
+        function confirmarBuff() {
+            const key = buffEmEdicao;
+            const info = DICIONARIO_BUFFS[key];
+
+            if (info.precisaAlvo) {
+                const alvoSelect = document.getElementById('modal-select-target').value;
+                if (!alvoSelect) return alert("Você precisa selecionar um jogador alvo!");
+                alvoSelecionado = alvoSelect;
+            }
+
+            // Buffs imediatos
+            if (key === 'chute') {
+                fecharModalBuff();
+                executarChuteCego();
+                return;
+            }
+            if (key === '5050') {
+                fecharModalBuff();
+                executar5050();
+                return;
+            }
+
+            // Buffs passivos (esperam clicar na resposta)
+            buffSelecionado = key;
+            document.getElementById('buff-' + key).classList.add('selected');
             atualizarContadorBuffs();
+            fecharModalBuff();
+        }
+
+        function executarChuteCego() {
+            const opes = ['A', 'B', 'C', 'D', 'E'];
+            buffSelecionado = 'chute'; // trava p/ insert
             enviarResposta(opes[Math.floor(Math.random() * opes.length)]);
         }
 
-        function usar5050() {
-            if (respostaEnviada || statusPartida !== 'aceitando_respostas' || buffsUsados.has('5050')) return;
+        function executar5050() {
             buffsUsados.add('5050');
             document.getElementById('buff-5050').classList.add('used');
             atualizarContadorBuffs();
@@ -518,9 +559,6 @@
             btns[1].classList.add('hidden-5050');
         }
 
-        // =========================================
-        // CORREÇÃO DO ENVIO DE RESPOSTA 
-        // =========================================
         async function enviarResposta(alternativa) {
             if (respostaEnviada || statusPartida !== 'aceitando_respostas') return;
 
@@ -528,36 +566,63 @@
             setButtonsEnabled(false);
             document.getElementById('round-info').innerText = `Opção [ ${alternativa} ] enviada!`;
 
-            // AQUI FOI CORRIGIDO: Salvamos o buff atual numa variável antes de resetá-lo para a tela
-            const buffUsadoNestaRodada = buffSelecionado;
+            const buffUsadoNesta = buffSelecionado;
+            const alvoDesta = alvoSelecionado;
 
-            if (buffSelecionado) {
-                buffsUsados.add(buffSelecionado);
-                document.getElementById('buff-' + buffSelecionado).classList.add('used');
-                buffSelecionado = null; // Reseta na interface para a próxima rodada
+            // Marca visualmente como usado no perfil
+            if (buffUsadoNesta) {
+                buffsUsados.add(buffUsadoNesta);
+                document.getElementById('buff-' + buffUsadoNesta).classList.remove('selected');
+                document.getElementById('buff-' + buffUsadoNesta).classList.add('used');
+                buffSelecionado = null; 
+                alvoSelecionado = null;
                 atualizarContadorBuffs();
             }
 
+            // INSERE NO BANCO - ATENÇÃO: a tabela respostas_rodada agora precisará da coluna alvo_id
             await supabaseClient.from('respostas_rodada').insert([{
                 jogador_id: jogadorAtual.id,
                 pergunta_id: perguntaAtualId || 'Q_ATUAL',
                 alternativa: alternativa,
-                buff_usado: buffUsadoNestaRodada // Aqui ele insere o buff corretamente no banco
+                buff_usado: buffUsadoNesta,
+                alvo_id: alvoDesta 
             }]);
         }
 
-        async function carregarOutrosJogadores() {
-            const { data } = await supabaseClient.from('jogadores').select('id, nome');
-            if (data) {
-                const select = document.getElementById('select-target-player');
-                select.innerHTML = '';
-                data.filter(j => j.id !== jogadorAtual.id).forEach(j => {
-                    const opt = document.createElement('option');
-                    opt.value = j.id;
-                    opt.innerText = j.nome;
-                    select.appendChild(opt);
+        // =========================================
+        // DRAWER LATERAL (JOGADORES ONLINE)
+        // =========================================
+        async function abrirMenuJogadores() {
+            document.getElementById('drawerOverlay').style.display = 'block';
+            document.getElementById('drawerJogadores').classList.add('open');
+            const lista = document.getElementById('lista-jogadores-online');
+            lista.innerHTML = '<div style="color:#a0a0c0; text-align:center; margin-top:20px;">Carregando...</div>';
+
+            const { data } = await supabaseClient.from('jogadores').select('id, nome, foto_url').order('nome');
+            
+            if (data && data.length > 0) {
+                lista.innerHTML = '';
+                data.forEach(j => {
+                    const isMe = (jogadorAtual && j.id === jogadorAtual.id) ? '<span class="player-item-badge">(Você)</span>' : '';
+                    const fotoUrl = (j.foto_url && !j.foto_url.includes('placeholder')) ? j.foto_url : getAvatarFallback(j.nome);
+                    lista.innerHTML += `
+                        <div class="player-item">
+                            <img src="${fotoUrl}" onerror="this.src=getAvatarFallback('${j.nome}')">
+                            <div class="player-item-info">
+                                <span class="player-item-name">${j.nome}</span>
+                                ${isMe}
+                            </div>
+                        </div>
+                    `;
                 });
+            } else {
+                lista.innerHTML = '<div style="color:#a0a0c0; text-align:center; margin-top:20px;">Vazio</div>';
             }
+        }
+
+        function fecharMenuJogadores() {
+            document.getElementById('drawerOverlay').style.display = 'none';
+            document.getElementById('drawerJogadores').classList.remove('open');
         }
     </script>
 </body>
