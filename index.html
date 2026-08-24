@@ -151,7 +151,7 @@
         <div id="screen-game">
             <div class="player-header">
                 <div class="player-info">
-                    <img id="p-avatar" class="player-avatar-small" src="" alt="Avatar">
+                    <img id="p-avatar" class="player-avatar-small" src="" alt="Avatar" onerror="handleImageError(this)">
                     <span id="p-name" class="player-name">--</span>
                     <button class="btn-logout" onclick="sairDoPerfil()">Sair 🚪</button>
                 </div>
@@ -217,6 +217,16 @@
         let buffsUsados = new Set();
         const TOTAL_BUFFS = 6;
 
+        function getAvatarFallback(nome) {
+            return `https://ui-avatars.com/api/?name=${encodeURIComponent(nome)}&background=7928ca&color=fff&bold=true`;
+        }
+
+        function handleImageError(img) {
+            if (jogadorAtual && jogadorAtual.nome) {
+                img.src = getAvatarFallback(jogadorAtual.nome);
+            }
+        }
+
         // Tenta reconectar automaticamente se houver sessão salva
         window.addEventListener('DOMContentLoaded', async () => {
             const sessaoSalva = localStorage.getItem('quiz_party_jogador');
@@ -267,8 +277,16 @@
             btnJoin.innerText = "ENTRANDO...";
 
             try {
-                let fotoUrl = "https://via.placeholder.com/150";
+                // 1. Verifica se já existe um jogador com esse nome no Supabase
+                const { data: existente } = await supabaseClient
+                    .from('jogadores')
+                    .select('*')
+                    .ilike('nome', nomeInput)
+                    .maybeSingle();
 
+                let fotoUrl = existente ? existente.foto_url : getAvatarFallback(nomeInput);
+
+                // 2. Se o usuário escolheu um arquivo de foto novo, faz o upload
                 if (fileFoto) {
                     const fileName = `${Date.now()}_${nomeInput.toLowerCase().replace(/[^a-z0-9]/g, '')}.jpg`;
                     const { error: uploadError } = await supabaseClient.storage
@@ -280,21 +298,39 @@
                             .from('fotos_perfil')
                             .getPublicUrl(fileName);
                         fotoUrl = publicUrlData.publicUrl;
-                    } else {
-                        console.warn("Erro no upload da foto (usando padrão):", uploadError.message);
                     }
+                } else if (existente && (existente.foto_url.includes('placeholder') || !existente.foto_url)) {
+                    // Atualiza foto antiga quebrada para o avatar com iniciais
+                    fotoUrl = getAvatarFallback(nomeInput);
                 }
 
-                const { data: newPlayer, error: playerError } = await supabaseClient
-                    .from('jogadores')
-                    .insert([{ nome: nomeInput, foto_url: fotoUrl }])
-                    .select()
-                    .single();
+                let playerFinal = null;
 
-                if (playerError) throw playerError;
+                if (existente) {
+                    // Reutiliza o perfil existente e atualiza a foto se necessário
+                    const { data: updatedPlayer, error: updateError } = await supabaseClient
+                        .from('jogadores')
+                        .update({ foto_url: fotoUrl })
+                        .eq('id', existente.id)
+                        .select()
+                        .single();
 
-                jogadorAtual = newPlayer;
-                localStorage.setItem('quiz_party_jogador', JSON.stringify(newPlayer));
+                    if (updateError) throw updateError;
+                    playerFinal = updatedPlayer;
+                } else {
+                    // Cria uma nova linha no banco apenas se for um nome novo
+                    const { data: newPlayer, error: playerError } = await supabaseClient
+                        .from('jogadores')
+                        .insert([{ nome: nomeInput, foto_url: fotoUrl }])
+                        .select()
+                        .single();
+
+                    if (playerError) throw playerError;
+                    playerFinal = newPlayer;
+                }
+
+                jogadorAtual = playerFinal;
+                localStorage.setItem('quiz_party_jogador', JSON.stringify(playerFinal));
 
                 iniciarTelaJogo();
             } catch (err) {
@@ -321,7 +357,9 @@
             document.getElementById('screen-login').style.display = 'none';
             document.getElementById('screen-game').style.display = 'flex';
             document.getElementById('p-name').innerText = jogadorAtual.nome;
-            document.getElementById('p-avatar').src = jogadorAtual.foto_url;
+            
+            const avatarImg = document.getElementById('p-avatar');
+            avatarImg.src = jogadorAtual.foto_url || getAvatarFallback(jogadorAtual.nome);
 
             atualizarContadorBuffs();
             escutarEstadoPartida();
@@ -388,7 +426,6 @@
                 badge.className = "status-badge status-active";
                 badge.innerText = "VALENDO";
 
-                // Verifica se o jogador já havia respondido antes de recarregar
                 await verificarRespostaJaEnviada();
 
                 if (!respostaEnviada) {
