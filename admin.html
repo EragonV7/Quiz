@@ -18,12 +18,16 @@
         .title { color: #ff0080; font-size: 32px; font-weight: 900; text-shadow: 0 0 15px rgba(255,0,128,0.4); }
         
         .panel { background: #1a1532; border-radius: 16px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); }
-        .panel h2 { color: #00f2fe; font-size: 18px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        .panel h2 { color: #00f2fe; font-size: 18px; margin: 0; }
+
+        .btn-refresh { background: #2a204a; border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        .btn-refresh:hover { background: #3d2f6b; }
 
         /* Controles */
         .controls { display: flex; gap: 10px; justify-content: space-between; }
-        button { flex: 1; padding: 15px; border-radius: 12px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; color: white; transition: transform 0.1s, opacity 0.2s; }
-        button:active { transform: scale(0.97); }
+        button.action-btn { flex: 1; padding: 15px; border-radius: 12px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; color: white; transition: transform 0.1s, opacity 0.2s; }
+        button.action-btn:active { transform: scale(0.97); }
         
         .btn-wait { background: #f39c12; }
         .btn-start { background: #00f2fe; color: #000; }
@@ -33,16 +37,18 @@
         .data-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
         
         .player-list { display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto; }
-        .player-item { display: flex; align-items: center; gap: 10px; background: #231b42; padding: 10px; border-radius: 10px; }
-        .player-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        .player-item { display: flex; align-items: center; gap: 10px; background: #231b42; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
+        .player-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid #00f2fe; }
+        .player-item span { font-weight: 600; font-size: 14px; }
         
         table { width: 100%; border-collapse: collapse; text-align: left; }
         th, td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         th { color: #a0a0c0; font-weight: 600; }
-        .badge-buff { background: #7928ca; padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+        .badge-buff { background: #7928ca; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
         .badge-alt { background: #00f2fe; color: #000; padding: 4px 10px; border-radius: 6px; font-weight: 900; font-size: 14px; }
         
-        #current-status { text-align: center; margin-top: 10px; font-weight: 700; color: #a0a0c0; }
+        #current-status { text-align: center; margin-top: 15px; font-weight: 700; color: #a0a0c0; }
+        .empty-msg { text-align: center; color: #666; padding: 20px 0; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -55,27 +61,34 @@
 
         <!-- CONTROLES DO JOGO -->
         <div class="panel">
-            <h2>1. Controle da Rodada</h2>
-            <div class="controls">
-                <button class="btn-wait" onclick="mudarStatus('aguardando_jogadores')">1. Preparar Nova Pergunta</button>
-                <button class="btn-start" onclick="iniciarRodada()">2. Liberar Respostas (VALENDO)</button>
-                <button class="btn-stop" onclick="mudarStatus('tempo_esgotado')">3. Encerrar Tempo (TRAVAR)</button>
+            <div class="panel-header">
+                <h2>1. Controle da Rodada</h2>
             </div>
-            <p id="current-status">Status atual: Buscando...</p>
+            <div class="controls">
+                <button class="action-btn btn-wait" onclick="mudarStatus('aguardando_jogadores')">1. Preparar Pergunta</button>
+                <button class="action-btn btn-start" onclick="iniciarRodada()">2. Liberar Respostas (VALENDO)</button>
+                <button class="action-btn btn-stop" onclick="mudarStatus('tempo_esgotado')">3. Encerrar Tempo (TRAVAR)</button>
+            </div>
+            <p id="current-status">Status atual: Conectando...</p>
         </div>
 
         <div class="data-grid">
             <!-- JOGADORES CONECTADOS -->
             <div class="panel">
-                <h2>Lobby (Jogadores)</h2>
+                <div class="panel-header">
+                    <h2>Lobby (Jogadores)</h2>
+                    <button class="btn-refresh" onclick="carregarJogadores()">🔄 Atualizar</button>
+                </div>
                 <div class="player-list" id="players-list">
-                    <!-- Preenchido via JS -->
+                    <div class="empty-msg">Carregando jogadores...</div>
                 </div>
             </div>
 
             <!-- RESPOSTAS DA RODADA -->
             <div class="panel">
-                <h2>Respostas ao Vivo</h2>
+                <div class="panel-header">
+                    <h2>Respostas ao Vivo</h2>
+                </div>
                 <table>
                     <thead>
                         <tr>
@@ -85,7 +98,7 @@
                         </tr>
                     </thead>
                     <tbody id="answers-list">
-                        <!-- Preenchido via JS -->
+                        <tr><td colspan="3" class="empty-msg">Nenhuma resposta registrada nesta rodada.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -95,18 +108,30 @@
     <script>
         const SUPABASE_URL = "https://azqtgvonviekeivefqde.supabase.co";
         const SUPABASE_KEY = "sb_publishable_U-C_YPVKJL48zEPdaQQGeg_nrE_F3Jm";
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
         let jogadoresMap = {};
         let perguntaAtualId = null;
 
-        // Inicializa o painel
-        window.onload = async () => {
+        function getAvatarFallback(nome) {
+            const inicial = (nome || '?').charAt(0).toUpperCase();
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+                <rect width="100%" height="100%" fill="#7928ca"/>
+                <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-size="50" font-family="sans-serif" font-weight="bold">${inicial}</text>
+            </svg>`;
+            return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            if (!supabase) return alert("Erro ao carregar SDK do Supabase.");
+            
             await carregarJogadores();
+            await buscarEstadoAtual();
+            
             escutarJogadores();
             escutarRespostas();
             escutarStatusDaPartida();
-        };
+        });
 
         // ==========================================
         // 1. CONTROLE DE ESTADO DA PARTIDA
@@ -116,8 +141,7 @@
             if (idPergunta) {
                 updateData.pergunta_atual_id = idPergunta;
                 perguntaAtualId = idPergunta;
-                // Limpa a tabela de respostas na tela do host
-                document.getElementById('answers-list').innerHTML = ''; 
+                document.getElementById('answers-list').innerHTML = '<tr><td colspan="3" class="empty-msg">Aguardando respostas...</td></tr>'; 
             }
 
             const { error } = await supabase
@@ -129,42 +153,53 @@
         }
 
         function iniciarRodada() {
-            // Gera um ID único para a nova pergunta usando a hora atual
             const novoIdPergunta = "PERGUNTA_" + Date.now(); 
             mudarStatus('aceitando_respostas', novoIdPergunta);
         }
 
+        async function buscarEstadoAtual() {
+            try {
+                const { data } = await supabase.from('partida_estado').select('*').eq('id', 1).single();
+                if (data) {
+                    document.getElementById('current-status').innerText = `Status atual: ${data.status.toUpperCase()}`;
+                    perguntaAtualId = data.pergunta_atual_id;
+                }
+            } catch (err) {
+                console.error("Erro ao buscar estado:", err);
+            }
+        }
+
         function escutarStatusDaPartida() {
             supabase
-                .channel('admin_estado')
+                .channel('admin_estado_' + Date.now())
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'partida_estado', id: 1 }, payload => {
                     document.getElementById('current-status').innerText = `Status atual: ${payload.new.status.toUpperCase()}`;
                     perguntaAtualId = payload.new.pergunta_atual_id;
                 })
                 .subscribe();
-
-            supabase.from('partida_estado').select('*').eq('id', 1).single().then(({ data }) => {
-                if (data) {
-                    document.getElementById('current-status').innerText = `Status atual: ${data.status.toUpperCase()}`;
-                    perguntaAtualId = data.pergunta_atual_id;
-                }
-            });
         }
 
         // ==========================================
         // 2. GERENCIAMENTO DE JOGADORES
         // ==========================================
         async function carregarJogadores() {
-            const { data } = await supabase.from('jogadores').select('*');
-            if (data) {
-                data.forEach(j => jogadoresMap[j.id] = j);
-                renderizarJogadores();
+            try {
+                const { data, error } = await supabase.from('jogadores').select('*');
+                if (error) throw error;
+                
+                if (data) {
+                    jogadoresMap = {};
+                    data.forEach(j => jogadoresMap[j.id] = j);
+                    renderizarJogadores();
+                }
+            } catch (err) {
+                console.error("Erro ao carregar jogadores:", err);
             }
         }
 
         function escutarJogadores() {
             supabase
-                .channel('admin_jogadores')
+                .channel('admin_jogadores_' + Date.now())
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'jogadores' }, payload => {
                     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
                         jogadoresMap[payload.new.id] = payload.new;
@@ -176,15 +211,24 @@
 
         function renderizarJogadores() {
             const list = document.getElementById('players-list');
+            const listaJogadores = Object.values(jogadoresMap);
+
+            if (listaJogadores.length === 0) {
+                list.innerHTML = '<div class="empty-msg">Nenhum jogador conectado ainda.</div>';
+                return;
+            }
+
             list.innerHTML = '';
-            Object.values(jogadoresMap).forEach(j => {
-                const foto = j.foto_url || `https://ui-avatars.com/api/?name=${j.nome}&background=7928ca&color=fff`;
-                list.innerHTML += `
-                    <div class="player-item">
-                        <img src="${foto}" alt="Avatar">
-                        <span>${j.nome}</span>
-                    </div>
+            listaJogadores.forEach(j => {
+                const foto = j.foto_url && !j.foto_url.includes('placeholder') ? j.foto_url : getAvatarFallback(j.nome);
+                
+                const item = document.createElement('div');
+                item.className = 'player-item';
+                item.innerHTML = `
+                    <img src="${foto}" alt="${j.nome}" onerror="this.src='${getAvatarFallback(j.nome)}'">
+                    <span>${j.nome}</span>
                 `;
+                list.appendChild(item);
             });
         }
 
@@ -193,9 +237,8 @@
         // ==========================================
         function escutarRespostas() {
             supabase
-                .channel('admin_respostas')
+                .channel('admin_respostas_' + Date.now())
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'respostas_rodada' }, payload => {
-                    // Só mostra a resposta se for da pergunta que está rolando agora
                     if (payload.new.pergunta_id === perguntaAtualId) {
                         adicionarRespostaNaTela(payload.new);
                     }
@@ -204,11 +247,17 @@
         }
 
         function adicionarRespostaNaTela(resposta) {
+            const tbody = document.getElementById('answers-list');
+            
+            // Remove mensagem de "Aguardando respostas..." se existir
+            if (tbody.querySelector('.empty-msg')) {
+                tbody.innerHTML = '';
+            }
+
             const jogador = jogadoresMap[resposta.jogador_id];
-            const nome = jogador ? jogador.nome : "Desconhecido";
+            const nome = jogador ? jogador.nome : "Jogador " + resposta.jogador_id.substring(0, 4);
             const buffHtml = resposta.buff_usado ? `<span class="badge-buff">${resposta.buff_usado}</span>` : '-';
             
-            const tbody = document.getElementById('answers-list');
             tbody.innerHTML += `
                 <tr>
                     <td>${nome}</td>
