@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Quiz Party - Controle do Jogador</title>
 
-    <!-- Supabase JS CDN (Carregado obrigatoriamente no cabeçalho) -->
+    <!-- Supabase JS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <!-- Google Fonts -->
@@ -54,7 +54,9 @@
             border: 3px solid #7928ca; display: flex; align-items: center;
             justify-content: center; overflow: hidden; font-size: 32px; color: #8a817c; cursor: pointer;
         }
-        .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+        /* Ajuste de centralização automática da foto de perfil */
+        .avatar-preview img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+        
         input[type="file"] { display: none; }
         .input-group { display: flex; flex-direction: column; gap: 6px; }
         label { font-size: 13px; color: #a0a0c0; font-weight: 600; }
@@ -75,8 +77,13 @@
         #screen-game { display: none; flex-direction: column; gap: 16px; }
         .player-header { display: flex; align-items: center; justify-content: space-between; background: #231b42; padding: 12px 16px; border-radius: 16px; }
         .player-info { display: flex; align-items: center; gap: 12px; }
-        .player-avatar-small { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #00f2fe; }
+        
+        /* Ajuste de centralização automática do avatar no jogo */
+        .player-avatar-small { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; object-position: center; border: 2px solid #00f2fe; }
         .player-name { font-weight: 700; font-size: 15px; }
+
+        .btn-logout { background: transparent; border: none; font-size: 18px; cursor: pointer; margin-left: 8px; opacity: 0.7; }
+        .btn-logout:hover { opacity: 1; }
 
         .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
         .status-waiting { background: rgba(255,193,7,0.2); color: #ffc107; }
@@ -145,6 +152,7 @@
                 <div class="player-info">
                     <img id="p-avatar" class="player-avatar-small" src="" alt="Avatar">
                     <span id="p-name" class="player-name">--</span>
+                    <button class="btn-logout" title="Sair do Perfil" onclick="sairDoPerfil()">🚪</button>
                 </div>
                 <span id="p-status" class="status-badge status-waiting">Aguardando</span>
             </div>
@@ -154,19 +162,19 @@
             <div class="buffs-section">
                 <div class="buffs-title">
                     <span>SEUS BUFFS</span>
-                    <span id="buff-active-label" style="color:#00f2fe; font-weight:700;">Nenhum</span>
+                    <span id="buff-active-label" style="color:#00f2fe; font-weight:700;">6/6 disponíveis</span>
                 </div>
                 <div class="buffs-grid">
-                    <div class="buff-card" id="buff-dobro" onclick="toggleBuff('dobro_ou_nada', 'Dobro ou Nada ⚡')">
+                    <div class="buff-card" id="buff-dobro" onclick="toggleBuff('dobro_ou_nada', 'Dobro/Nada')">
                         <span class="buff-icon">⚡</span><span>Dobro/Nada</span>
                     </div>
-                    <div class="buff-card" id="buff-escudo" onclick="toggleBuff('escudo', 'Escudo 🛡️')">
+                    <div class="buff-card" id="buff-escudo" onclick="toggleBuff('escudo', 'Escudo')">
                         <span class="buff-icon">🛡️</span><span>Escudo</span>
                     </div>
-                    <div class="buff-card" id="buff-vampiro" onclick="toggleBuff('vampiro', 'Vampiro 🧛')">
+                    <div class="buff-card" id="buff-vampiro" onclick="toggleBuff('vampiro', 'Vampiro')">
                         <span class="buff-icon">🧛</span><span>Vampiro</span>
                     </div>
-                    <div class="buff-card" id="buff-maria" onclick="toggleBuff('maria', 'Maria 👯')">
+                    <div class="buff-card" id="buff-maria" onclick="toggleBuff('maria', 'Copiar')">
                         <span class="buff-icon">👯</span><span>Copiar</span>
                     </div>
                     <div class="buff-card" id="buff-chute" onclick="usarChuteCego()">
@@ -197,7 +205,6 @@
         const SUPABASE_URL = "https://azqtgvonviekeivefqde.supabase.co";
         const SUPABASE_KEY = "sb_publishable_U-C_YPVKJL48zEPdaQQGeg_nrE_F3Jm";
         
-        // Inicialização do cliente Supabase a partir da biblioteca global do CDN
         const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
         let jogadorAtual = null;
@@ -207,6 +214,31 @@
         let respostaEnviada = false;
         let fileFoto = null;
         let buffsUsados = new Set();
+        const TOTAL_BUFFS = 6;
+
+        // Tenta reconectar automaticamente se houver sessão salva
+        window.addEventListener('DOMContentLoaded', async () => {
+            const sessaoSalva = localStorage.getItem('quiz_party_jogador');
+            if (sessaoSalva && supabaseClient) {
+                try {
+                    const playerLocal = JSON.parse(sessaoSalva);
+                    const { data, error } = await supabaseClient
+                        .from('jogadores')
+                        .select('*')
+                        .eq('id', playerLocal.id)
+                        .single();
+
+                    if (data && !error) {
+                        jogadorAtual = data;
+                        iniciarTelaJogo();
+                    } else {
+                        localStorage.removeItem('quiz_party_jogador');
+                    }
+                } catch (err) {
+                    localStorage.removeItem('quiz_party_jogador');
+                }
+            }
+        });
 
         function previewAvatar(event) {
             const file = event.target.files[0];
@@ -259,11 +291,21 @@
                 if (playerError) throw playerError;
 
                 jogadorAtual = newPlayer;
+                // Salva a sessão no celular do usuário
+                localStorage.setItem('quiz_party_jogador', JSON.stringify(newPlayer));
+
                 iniciarTelaJogo();
             } catch (err) {
                 alert("Erro ao entrar no jogo: " + err.message);
                 btnJoin.disabled = false;
                 btnJoin.innerText = "ENTRAR NO JOGO";
+            }
+        }
+
+        function sairDoPerfil() {
+            if (confirm("Deseja sair do seu perfil atual?")) {
+                localStorage.removeItem('quiz_party_jogador');
+                location.reload();
             }
         }
 
@@ -273,8 +315,20 @@
             document.getElementById('p-name').innerText = jogadorAtual.nome;
             document.getElementById('p-avatar').src = jogadorAtual.foto_url;
 
+            atualizarContadorBuffs();
             escutarEstadoPartida();
             carregarOutrosJogadores();
+        }
+
+        function atualizarContadorBuffs() {
+            const disponiveis = TOTAL_BUFFS - buffsUsados.size;
+            const label = document.getElementById('buff-active-label');
+            
+            if (buffSelecionado) {
+                label.innerText = `Ativo! (${disponiveis}/${TOTAL_BUFFS} rest.)`;
+            } else {
+                label.innerText = `${disponiveis}/${TOTAL_BUFFS} disponíveis`;
+            }
         }
 
         function escutarEstadoPartida() {
@@ -301,7 +355,7 @@
                 if (respostaEnviada && perguntaAtualId !== window.perguntaAnteriorId) {
                     respostaEnviada = false;
                     buffSelecionado = null;
-                    document.getElementById('buff-active-label').innerText = "Nenhum";
+                    atualizarContadorBuffs();
                     resetVisualBotoes();
                 }
                 window.perguntaAnteriorId = perguntaAtualId;
@@ -348,24 +402,23 @@
 
             if (buffSelecionado === buffKey) {
                 buffSelecionado = null;
-                document.getElementById('buff-active-label').innerText = "Nenhum";
                 document.getElementById('buff-' + buffKey).classList.remove('selected');
                 document.getElementById('target-select-container').style.display = 'none';
             } else {
                 document.querySelectorAll('.buff-card').forEach(c => c.classList.remove('selected'));
                 buffSelecionado = buffKey;
-                document.getElementById('buff-active-label').innerText = buffNome;
                 document.getElementById('buff-' + buffKey).classList.add('selected');
-
                 document.getElementById('target-select-container').style.display = (buffKey === 'maria') ? 'block' : 'none';
             }
+            atualizarContadorBuffs();
         }
 
         function usarChuteCego() {
-            if (respostaEnviada || statusPartida !== 'aceitando_respostas') return;
+            if (respostaEnviada || statusPartida !== 'aceitando_respostas' || buffsUsados.has('chute')) return;
             const opes = ['A', 'B', 'C', 'D', 'E'];
             buffsUsados.add('chute');
             document.getElementById('buff-chute').classList.add('used');
+            atualizarContadorBuffs();
             enviarResposta(opes[Math.floor(Math.random() * opes.length)]);
         }
 
@@ -373,6 +426,7 @@
             if (respostaEnviada || statusPartida !== 'aceitando_respostas' || buffsUsados.has('5050')) return;
             buffsUsados.add('5050');
             document.getElementById('buff-5050').classList.add('used');
+            atualizarContadorBuffs();
 
             const btns = Array.from(document.querySelectorAll('.btn-answer')).sort(() => 0.5 - Math.random());
             btns[0].classList.add('hidden-5050');
@@ -389,6 +443,8 @@
             if (buffSelecionado) {
                 buffsUsados.add(buffSelecionado);
                 document.getElementById('buff-' + buffSelecionado).classList.add('used');
+                buffSelecionado = null;
+                atualizarContadorBuffs();
             }
 
             await supabaseClient.from('respostas_rodada').insert([{
