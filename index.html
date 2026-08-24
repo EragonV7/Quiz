@@ -385,6 +385,9 @@
             }
         }
 
+        // =========================================
+        // CORREÇÃO DO REALTIME 
+        // =========================================
         function escutarEstadoPartida() {
             // Remove o canal anterior se já estiver registrado para evitar conflitos
             if (canalRealtime) {
@@ -392,13 +395,16 @@
                 canalRealtime = null;
             }
 
+            // AQUI FOI CORRIGIDO: Retirado o 'id: 1' solto que quebrava o Realtime no Supabase v2
             canalRealtime = supabaseClient
                 .channel('realtime_partida_' + Date.now())
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'partida_estado', id: 1 }, payload => {
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'partida_estado' }, payload => {
+                    console.log("Status recebido do Host:", payload.new);
                     atualizarEstadoLocal(payload.new);
                 })
                 .subscribe();
 
+            // Busca o estado inicial
             supabaseClient.from('partida_estado').select('*').eq('id', 1).single().then(({ data }) => {
                 if (data) atualizarEstadoLocal(data);
             });
@@ -422,6 +428,9 @@
         }
 
         async function atualizarEstadoLocal(estado) {
+            // Previne falhas se o banco retornar vazio
+            if (!estado) return;
+
             statusPartida = estado.status;
             perguntaAtualId = estado.pergunta_atual_id;
 
@@ -509,6 +518,9 @@
             btns[1].classList.add('hidden-5050');
         }
 
+        // =========================================
+        // CORREÇÃO DO ENVIO DE RESPOSTA 
+        // =========================================
         async function enviarResposta(alternativa) {
             if (respostaEnviada || statusPartida !== 'aceitando_respostas') return;
 
@@ -516,10 +528,13 @@
             setButtonsEnabled(false);
             document.getElementById('round-info').innerText = `Opção [ ${alternativa} ] enviada!`;
 
+            // AQUI FOI CORRIGIDO: Salvamos o buff atual numa variável antes de resetá-lo para a tela
+            const buffUsadoNestaRodada = buffSelecionado;
+
             if (buffSelecionado) {
                 buffsUsados.add(buffSelecionado);
                 document.getElementById('buff-' + buffSelecionado).classList.add('used');
-                buffSelecionado = null;
+                buffSelecionado = null; // Reseta na interface para a próxima rodada
                 atualizarContadorBuffs();
             }
 
@@ -527,7 +542,7 @@
                 jogador_id: jogadorAtual.id,
                 pergunta_id: perguntaAtualId || 'Q_ATUAL',
                 alternativa: alternativa,
-                buff_usado: buffSelecionado
+                buff_usado: buffUsadoNestaRodada // Aqui ele insere o buff corretamente no banco
             }]);
         }
 
