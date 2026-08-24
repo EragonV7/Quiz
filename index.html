@@ -54,7 +54,6 @@
             border: 3px solid #7928ca; display: flex; align-items: center;
             justify-content: center; overflow: hidden; font-size: 32px; color: #8a817c; cursor: pointer;
         }
-        /* Ajuste de centralização automática da foto de perfil */
         .avatar-preview img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
         
         input[type="file"] { display: none; }
@@ -76,14 +75,16 @@
 
         #screen-game { display: none; flex-direction: column; gap: 16px; }
         .player-header { display: flex; align-items: center; justify-content: space-between; background: #231b42; padding: 12px 16px; border-radius: 16px; }
-        .player-info { display: flex; align-items: center; gap: 12px; }
+        .player-info { display: flex; align-items: center; gap: 10px; }
         
-        /* Ajuste de centralização automática do avatar no jogo */
         .player-avatar-small { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; object-position: center; border: 2px solid #00f2fe; }
         .player-name { font-weight: 700; font-size: 15px; }
 
-        .btn-logout { background: transparent; border: none; font-size: 18px; cursor: pointer; margin-left: 8px; opacity: 0.7; }
-        .btn-logout:hover { opacity: 1; }
+        .btn-logout { 
+            background: #2a204a; border: 1px solid rgba(255,255,255,0.1); color: #ff4b4b; 
+            padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: 6px; 
+        }
+        .btn-logout:active { transform: scale(0.95); }
 
         .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
         .status-waiting { background: rgba(255,193,7,0.2); color: #ffc107; }
@@ -152,7 +153,7 @@
                 <div class="player-info">
                     <img id="p-avatar" class="player-avatar-small" src="" alt="Avatar">
                     <span id="p-name" class="player-name">--</span>
-                    <button class="btn-logout" title="Sair do Perfil" onclick="sairDoPerfil()">🚪</button>
+                    <button class="btn-logout" onclick="sairDoPerfil()">Sair 🚪</button>
                 </div>
                 <span id="p-status" class="status-badge status-waiting">Aguardando</span>
             </div>
@@ -279,6 +280,8 @@
                             .from('fotos_perfil')
                             .getPublicUrl(fileName);
                         fotoUrl = publicUrlData.publicUrl;
+                    } else {
+                        console.warn("Erro no upload da foto (usando padrão):", uploadError.message);
                     }
                 }
 
@@ -291,7 +294,6 @@
                 if (playerError) throw playerError;
 
                 jogadorAtual = newPlayer;
-                // Salva a sessão no celular do usuário
                 localStorage.setItem('quiz_party_jogador', JSON.stringify(newPlayer));
 
                 iniciarTelaJogo();
@@ -303,10 +305,16 @@
         }
 
         function sairDoPerfil() {
-            if (confirm("Deseja sair do seu perfil atual?")) {
-                localStorage.removeItem('quiz_party_jogador');
-                location.reload();
-            }
+            localStorage.removeItem('quiz_party_jogador');
+            jogadorAtual = null;
+            document.getElementById('screen-game').style.display = 'none';
+            document.getElementById('screen-login').style.display = 'flex';
+            document.getElementById('btn-join').disabled = false;
+            document.getElementById('btn-join').innerText = "ENTRAR NO JOGO";
+            document.getElementById('input-name').value = '';
+            document.getElementById('avatar-img').style.display = 'none';
+            document.getElementById('avatar-placeholder').style.display = 'block';
+            fileFoto = null;
         }
 
         function iniciarTelaJogo() {
@@ -344,7 +352,24 @@
             });
         }
 
-        function atualizarEstadoLocal(estado) {
+        async function verificarRespostaJaEnviada() {
+            if (!jogadorAtual || !perguntaAtualId) return;
+
+            const { data } = await supabaseClient
+                .from('respostas_rodada')
+                .select('alternativa')
+                .eq('jogador_id', jogadorAtual.id)
+                .eq('pergunta_id', perguntaAtualId)
+                .maybeSingle();
+
+            if (data) {
+                respostaEnviada = true;
+                setButtonsEnabled(false);
+                document.getElementById('round-info').innerText = `Resposta já enviada [ ${data.alternativa} ]!`;
+            }
+        }
+
+        async function atualizarEstadoLocal(estado) {
             statusPartida = estado.status;
             perguntaAtualId = estado.pergunta_atual_id;
 
@@ -352,7 +377,7 @@
             const info = document.getElementById('round-info');
 
             if (estado.status === 'aceitando_respostas') {
-                if (respostaEnviada && perguntaAtualId !== window.perguntaAnteriorId) {
+                if (perguntaAtualId !== window.perguntaAnteriorId) {
                     respostaEnviada = false;
                     buffSelecionado = null;
                     atualizarContadorBuffs();
@@ -363,12 +388,12 @@
                 badge.className = "status-badge status-active";
                 badge.innerText = "VALENDO";
 
+                // Verifica se o jogador já havia respondido antes de recarregar
+                await verificarRespostaJaEnviada();
+
                 if (!respostaEnviada) {
                     info.innerText = "Escolha sua opção:";
                     setButtonsEnabled(true);
-                } else {
-                    info.innerText = "Resposta enviada!";
-                    setButtonsEnabled(false);
                 }
             } else if (estado.status === 'tempo_esgotado') {
                 badge.className = "status-badge status-locked";
