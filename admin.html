@@ -108,7 +108,11 @@
     <script>
         const SUPABASE_URL = "https://azqtgvonviekeivefqde.supabase.co";
         const SUPABASE_KEY = "sb_publishable_U-C_YPVKJL48zEPdaQQGeg_nrE_F3Jm";
-        const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+        
+        // Nome da variável ajustado para evitar conflito global
+        const supabaseClient = (window.supabase && window.supabase.createClient) 
+            ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) 
+            : null;
 
         let jogadoresMap = {};
         let perguntaAtualId = null;
@@ -123,7 +127,10 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
-            if (!supabase) return alert("Erro ao carregar SDK do Supabase.");
+            if (!supabaseClient) {
+                alert("Erro ao carregar SDK do Supabase. Verifique a conexão.");
+                return;
+            }
             
             await carregarJogadores();
             await buscarEstadoAtual();
@@ -137,6 +144,7 @@
         // 1. CONTROLE DE ESTADO DA PARTIDA
         // ==========================================
         async function mudarStatus(novoStatus, idPergunta = null) {
+            if (!supabaseClient) return;
             const updateData = { status: novoStatus };
             if (idPergunta) {
                 updateData.pergunta_atual_id = idPergunta;
@@ -144,7 +152,7 @@
                 document.getElementById('answers-list').innerHTML = '<tr><td colspan="3" class="empty-msg">Aguardando respostas...</td></tr>'; 
             }
 
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('partida_estado')
                 .update(updateData)
                 .eq('id', 1);
@@ -158,8 +166,9 @@
         }
 
         async function buscarEstadoAtual() {
+            if (!supabaseClient) return;
             try {
-                const { data } = await supabase.from('partida_estado').select('*').eq('id', 1).single();
+                const { data } = await supabaseClient.from('partida_estado').select('*').eq('id', 1).single();
                 if (data) {
                     document.getElementById('current-status').innerText = `Status atual: ${data.status.toUpperCase()}`;
                     perguntaAtualId = data.pergunta_atual_id;
@@ -170,7 +179,8 @@
         }
 
         function escutarStatusDaPartida() {
-            supabase
+            if (!supabaseClient) return;
+            supabaseClient
                 .channel('admin_estado_' + Date.now())
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'partida_estado', id: 1 }, payload => {
                     document.getElementById('current-status').innerText = `Status atual: ${payload.new.status.toUpperCase()}`;
@@ -183,8 +193,9 @@
         // 2. GERENCIAMENTO DE JOGADORES
         // ==========================================
         async function carregarJogadores() {
+            if (!supabaseClient) return;
             try {
-                const { data, error } = await supabase.from('jogadores').select('*');
+                const { data, error } = await supabaseClient.from('jogadores').select('*');
                 if (error) throw error;
                 
                 if (data) {
@@ -198,7 +209,8 @@
         }
 
         function escutarJogadores() {
-            supabase
+            if (!supabaseClient) return;
+            supabaseClient
                 .channel('admin_jogadores_' + Date.now())
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'jogadores' }, payload => {
                     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -220,7 +232,7 @@
 
             list.innerHTML = '';
             listaJogadores.forEach(j => {
-                const foto = j.foto_url && !j.foto_url.includes('placeholder') ? j.foto_url : getAvatarFallback(j.nome);
+                const foto = (j.foto_url && !j.foto_url.includes('placeholder')) ? j.foto_url : getAvatarFallback(j.nome);
                 
                 const item = document.createElement('div');
                 item.className = 'player-item';
@@ -236,7 +248,8 @@
         // 3. MONITORAMENTO DE RESPOSTAS
         // ==========================================
         function escutarRespostas() {
-            supabase
+            if (!supabaseClient) return;
+            supabaseClient
                 .channel('admin_respostas_' + Date.now())
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'respostas_rodada' }, payload => {
                     if (payload.new.pergunta_id === perguntaAtualId) {
@@ -249,7 +262,6 @@
         function adicionarRespostaNaTela(resposta) {
             const tbody = document.getElementById('answers-list');
             
-            // Remove mensagem de "Aguardando respostas..." se existir
             if (tbody.querySelector('.empty-msg')) {
                 tbody.innerHTML = '';
             }
