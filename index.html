@@ -214,11 +214,18 @@
         let buffSelecionado = null;
         let respostaEnviada = false;
         let fileFoto = null;
+        let canalRealtime = null;
         let buffsUsados = new Set();
         const TOTAL_BUFFS = 6;
 
+        // Gera avatar com a inicial localmente em SVG
         function getAvatarFallback(nome) {
-            return `https://ui-avatars.com/api/?name=${encodeURIComponent(nome)}&background=7928ca&color=fff&bold=true`;
+            const inicial = (nome || '?').charAt(0).toUpperCase();
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+                <rect width="100%" height="100%" fill="#7928ca"/>
+                <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-size="50" font-family="sans-serif" font-weight="bold">${inicial}</text>
+            </svg>`;
+            return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
         }
 
         function handleImageError(img) {
@@ -277,16 +284,18 @@
             btnJoin.innerText = "ENTRANDO...";
 
             try {
-                // 1. Verifica se já existe um jogador com esse nome no Supabase
+                // 1. Busca jogador com esse nome no Supabase
                 const { data: existente } = await supabaseClient
                     .from('jogadores')
                     .select('*')
                     .ilike('nome', nomeInput)
                     .maybeSingle();
 
-                let fotoUrl = existente ? existente.foto_url : getAvatarFallback(nomeInput);
+                let fotoUrl = (existente && existente.foto_url && !existente.foto_url.includes('placeholder')) 
+                    ? existente.foto_url 
+                    : getAvatarFallback(nomeInput);
 
-                // 2. Se o usuário escolheu um arquivo de foto novo, faz o upload
+                // 2. Se o usuário enviou uma imagem nova
                 if (fileFoto) {
                     const fileName = `${Date.now()}_${nomeInput.toLowerCase().replace(/[^a-z0-9]/g, '')}.jpg`;
                     const { error: uploadError } = await supabaseClient.storage
@@ -299,15 +308,11 @@
                             .getPublicUrl(fileName);
                         fotoUrl = publicUrlData.publicUrl;
                     }
-                } else if (existente && (existente.foto_url.includes('placeholder') || !existente.foto_url)) {
-                    // Atualiza foto antiga quebrada para o avatar com iniciais
-                    fotoUrl = getAvatarFallback(nomeInput);
                 }
 
                 let playerFinal = null;
 
                 if (existente) {
-                    // Reutiliza o perfil existente e atualiza a foto se necessário
                     const { data: updatedPlayer, error: updateError } = await supabaseClient
                         .from('jogadores')
                         .update({ foto_url: fotoUrl })
@@ -318,7 +323,6 @@
                     if (updateError) throw updateError;
                     playerFinal = updatedPlayer;
                 } else {
-                    // Cria uma nova linha no banco apenas se for um nome novo
                     const { data: newPlayer, error: playerError } = await supabaseClient
                         .from('jogadores')
                         .insert([{ nome: nomeInput, foto_url: fotoUrl }])
@@ -341,6 +345,10 @@
         }
 
         function sairDoPerfil() {
+            if (canalRealtime) {
+                supabaseClient.removeChannel(canalRealtime);
+                canalRealtime = null;
+            }
             localStorage.removeItem('quiz_party_jogador');
             jogadorAtual = null;
             document.getElementById('screen-game').style.display = 'none';
@@ -378,8 +386,14 @@
         }
 
         function escutarEstadoPartida() {
-            supabaseClient
-                .channel('realtime_partida')
+            // Remove o canal anterior se já estiver registrado para evitar conflitos
+            if (canalRealtime) {
+                supabaseClient.removeChannel(canalRealtime);
+                canalRealtime = null;
+            }
+
+            canalRealtime = supabaseClient
+                .channel('realtime_partida_' + Date.now())
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'partida_estado', id: 1 }, payload => {
                     atualizarEstadoLocal(payload.new);
                 })
