@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Party - Painel do Host 👑</title>
+
+    <!-- Supabase JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
+        body { background-color: #0b0914; color: #ffffff; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        
+        .admin-container { width: 100%; max-width: 900px; display: grid; gap: 20px; }
+        .header { text-align: center; margin-bottom: 10px; }
+        .title { color: #ff0080; font-size: 32px; font-weight: 900; text-shadow: 0 0 15px rgba(255,0,128,0.4); }
+        
+        .panel { background: #1a1532; border-radius: 16px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); }
+        .panel h2 { color: #00f2fe; font-size: 18px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+
+        /* Controles */
+        .controls { display: flex; gap: 10px; justify-content: space-between; }
+        button { flex: 1; padding: 15px; border-radius: 12px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; color: white; transition: transform 0.1s, opacity 0.2s; }
+        button:active { transform: scale(0.97); }
+        
+        .btn-wait { background: #f39c12; }
+        .btn-start { background: #00f2fe; color: #000; }
+        .btn-stop { background: #ff4b4b; }
+
+        /* Grid de Jogadores e Respostas */
+        .data-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+        
+        .player-list { display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto; }
+        .player-item { display: flex; align-items: center; gap: 10px; background: #231b42; padding: 10px; border-radius: 10px; }
+        .player-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th, td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        th { color: #a0a0c0; font-weight: 600; }
+        .badge-buff { background: #7928ca; padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+        .badge-alt { background: #00f2fe; color: #000; padding: 4px 10px; border-radius: 6px; font-weight: 900; font-size: 14px; }
+        
+        #current-status { text-align: center; margin-top: 10px; font-weight: 700; color: #a0a0c0; }
+    </style>
+</head>
+<body>
+
+    <div class="admin-container">
+        <div class="header">
+            <h1 class="title">PAINEL DO HOST 👑</h1>
+            <p>Controle do Quiz Party</p>
+        </div>
+
+        <!-- CONTROLES DO JOGO -->
+        <div class="panel">
+            <h2>1. Controle da Rodada</h2>
+            <div class="controls">
+                <button class="btn-wait" onclick="mudarStatus('aguardando_jogadores')">1. Preparar Nova Pergunta</button>
+                <button class="btn-start" onclick="iniciarRodada()">2. Liberar Respostas (VALENDO)</button>
+                <button class="btn-stop" onclick="mudarStatus('tempo_esgotado')">3. Encerrar Tempo (TRAVAR)</button>
+            </div>
+            <p id="current-status">Status atual: Buscando...</p>
+        </div>
+
+        <div class="data-grid">
+            <!-- JOGADORES CONECTADOS -->
+            <div class="panel">
+                <h2>Lobby (Jogadores)</h2>
+                <div class="player-list" id="players-list">
+                    <!-- Preenchido via JS -->
+                </div>
+            </div>
+
+            <!-- RESPOSTAS DA RODADA -->
+            <div class="panel">
+                <h2>Respostas ao Vivo</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Jogador</th>
+                            <th>Alternativa</th>
+                            <th>Buff Usado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="answers-list">
+                        <!-- Preenchido via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://azqtgvonviekeivefqde.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_U-C_YPVKJL48zEPdaQQGeg_nrE_F3Jm";
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let jogadoresMap = {};
+        let perguntaAtualId = null;
+
+        // Inicializa o painel
+        window.onload = async () => {
+            await carregarJogadores();
+            escutarJogadores();
+            escutarRespostas();
+            escutarStatusDaPartida();
+        };
+
+        // ==========================================
+        // 1. CONTROLE DE ESTADO DA PARTIDA
+        // ==========================================
+        async function mudarStatus(novoStatus, idPergunta = null) {
+            const updateData = { status: novoStatus };
+            if (idPergunta) {
+                updateData.pergunta_atual_id = idPergunta;
+                perguntaAtualId = idPergunta;
+                // Limpa a tabela de respostas na tela do host
+                document.getElementById('answers-list').innerHTML = ''; 
+            }
+
+            const { error } = await supabase
+                .from('partida_estado')
+                .update(updateData)
+                .eq('id', 1);
+
+            if (error) alert("Erro ao atualizar status: " + error.message);
+        }
+
+        function iniciarRodada() {
+            // Gera um ID único para a nova pergunta usando a hora atual
+            const novoIdPergunta = "PERGUNTA_" + Date.now(); 
+            mudarStatus('aceitando_respostas', novoIdPergunta);
+        }
+
+        function escutarStatusDaPartida() {
+            supabase
+                .channel('admin_estado')
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'partida_estado', id: 1 }, payload => {
+                    document.getElementById('current-status').innerText = `Status atual: ${payload.new.status.toUpperCase()}`;
+                    perguntaAtualId = payload.new.pergunta_atual_id;
+                })
+                .subscribe();
+
+            supabase.from('partida_estado').select('*').eq('id', 1).single().then(({ data }) => {
+                if (data) {
+                    document.getElementById('current-status').innerText = `Status atual: ${data.status.toUpperCase()}`;
+                    perguntaAtualId = data.pergunta_atual_id;
+                }
+            });
+        }
+
+        // ==========================================
+        // 2. GERENCIAMENTO DE JOGADORES
+        // ==========================================
+        async function carregarJogadores() {
+            const { data } = await supabase.from('jogadores').select('*');
+            if (data) {
+                data.forEach(j => jogadoresMap[j.id] = j);
+                renderizarJogadores();
+            }
+        }
+
+        function escutarJogadores() {
+            supabase
+                .channel('admin_jogadores')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'jogadores' }, payload => {
+                    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                        jogadoresMap[payload.new.id] = payload.new;
+                    }
+                    renderizarJogadores();
+                })
+                .subscribe();
+        }
+
+        function renderizarJogadores() {
+            const list = document.getElementById('players-list');
+            list.innerHTML = '';
+            Object.values(jogadoresMap).forEach(j => {
+                const foto = j.foto_url || `https://ui-avatars.com/api/?name=${j.nome}&background=7928ca&color=fff`;
+                list.innerHTML += `
+                    <div class="player-item">
+                        <img src="${foto}" alt="Avatar">
+                        <span>${j.nome}</span>
+                    </div>
+                `;
+            });
+        }
+
+        // ==========================================
+        // 3. MONITORAMENTO DE RESPOSTAS
+        // ==========================================
+        function escutarRespostas() {
+            supabase
+                .channel('admin_respostas')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'respostas_rodada' }, payload => {
+                    // Só mostra a resposta se for da pergunta que está rolando agora
+                    if (payload.new.pergunta_id === perguntaAtualId) {
+                        adicionarRespostaNaTela(payload.new);
+                    }
+                })
+                .subscribe();
+        }
+
+        function adicionarRespostaNaTela(resposta) {
+            const jogador = jogadoresMap[resposta.jogador_id];
+            const nome = jogador ? jogador.nome : "Desconhecido";
+            const buffHtml = resposta.buff_usado ? `<span class="badge-buff">${resposta.buff_usado}</span>` : '-';
+            
+            const tbody = document.getElementById('answers-list');
+            tbody.innerHTML += `
+                <tr>
+                    <td>${nome}</td>
+                    <td><span class="badge-alt">${resposta.alternativa}</span></td>
+                    <td>${buffHtml}</td>
+                </tr>
+            `;
+        }
+    </script>
+</body>
+</html>
