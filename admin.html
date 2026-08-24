@@ -246,11 +246,16 @@
             }
         }
 
-        // 4. RESPOSTAS AO VIVO
+        // 4. RESPOSTAS AO VIVO (CORRIGIDO)
         function escutarRespostas() {
             supabaseClient.channel('admin_respostas')
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'respostas_rodada' }, payload => {
-                    if (payload.new.pergunta_id === document.getElementById('input-questao').value) {
+                    
+                    const questaoAtual = document.getElementById('input-questao').value;
+                    
+                    // Compara transformando ambos em Texto para evitar bug de Número vs Texto
+                    if (String(payload.new.pergunta_id) === String(questaoAtual)) {
+                        
                         const tbody = document.getElementById('answers-list');
                         if (tbody.querySelector('.empty-msg')) tbody.innerHTML = '';
                         
