@@ -160,16 +160,33 @@
 
                 const { data: respostas } = await supabaseClient.from('respostas_rodada').select('*').eq('pergunta_id', questaoNum);
                 
-                let acertos = 0;
-                let pontosDistribuidos = 0;
                 let eventoEspecial = "";
-                
-                respostas.forEach(r => { if (r.alternativa === correta) acertos++; });
 
-                // LÓGICA DINÂMICA
+                // ==========================================
+                // FASE 0: RESOLVER BUFFS DE CÓPIA (MARIA)
+                // ==========================================
+                for (let r of respostas) {
+                    if (r.buff_usado === 'maria' && r.alvo_id) {
+                        const respostaAlvo = respostas.find(res => res.jogador_id === r.alvo_id);
+                        if (respostaAlvo) {
+                            r.alternativa = respostaAlvo.alternativa; // Copia a resposta do alvo silenciosamente!
+                            eventoEspecial += `<br>👯 <b>${jogadoresMap[r.jogador_id]?.nome}</b> copiou a resposta de <b>${jogadoresMap[r.alvo_id]?.nome}</b>!`;
+                        }
+                    }
+                }
+
+                // Conta os acertos REAIS após as cópias
+                let acertos = 0;
+                respostas.forEach(r => { if (r.alternativa === correta) acertos++; });
+                
+                let pontosDistribuidos = 0;
+
+                // ==========================================
+                // FASE 1: MATEMÁTICA BASE E ESCASSEZ
+                // ==========================================
                 if (respostas.length > 0) {
                     if (acertos === respostas.length) {
-                        eventoEspecial = "Fácil demais! Todos acertaram, ninguém pontua.";
+                        eventoEspecial += "<br>😴 Fácil demais! Todos acertaram, ninguém pontua.";
                     } else if (acertos === 0) {
                         // Todos erraram: Piedade pro último colocado
                         let rankArr = Object.values(jogadoresMap).sort((a,b) => (a.pontos||0) - (b.pontos||0));
@@ -178,38 +195,71 @@
                             let nv = (ultimo.pontos || 0) + 10;
                             await supabaseClient.from('jogadores').update({ pontos: nv }).eq('id', ultimo.id);
                             pontosDistribuidos = 10;
-                            eventoEspecial = `Todos erraram! O sistema deu 10 pts de consolação para ${ultimo.nome}.`;
+                            eventoEspecial += `<br>😭 Todos erraram! 10 pts de consolação para ${ultimo.nome}.`;
                         }
                     } else {
-                        // Calcula pontos base pela escassez (1 acerto = 100, 2 acertos = 90...)
+                        // Calcula pontos base (Ex: 1 acerto = 100, 2 acertos = 90)
                         let pontosBase = Math.max(10, 100 - ((acertos - 1) * 10));
-                        
+                        let ganhosDaRodada = {}; 
+                        Object.keys(jogadoresMap).forEach(id => ganhosDaRodada[id] = 0);
+
+                        // FASE 2: PONTUAÇÃO INDIVIDUAL (Dobro e Escudo Base)
                         for (let r of respostas) {
                             let pts = 0;
                             if (r.alternativa === correta) {
                                 pts = pontosBase;
                                 if (r.buff_usado === 'dobro') pts *= 2;
                             } else {
-                                // Se errar com o dobro, perde o dobro!
-                                if (r.buff_usado === 'dobro') pts = -(pontosBase * 2);
+                                if (r.buff_usado === 'dobro') pts = -(pontosBase * 2); // Perde em dobro!
+                                if (r.buff_usado === 'escudo') pts = 0; // Escudo anula perdas globais
                             }
+                            ganhosDaRodada[r.jogador_id] += pts;
+                        }
 
+                        // FASE 3: ATAQUES ENTRE JOGADORES (Vampiro vs Escudo)
+                        for (let r of respostas) {
+                            if (r.buff_usado === 'vampiro' && r.alternativa === correta && r.alvo_id) {
+                                const alvoId = r.alvo_id;
+                                const respostaAlvo = respostas.find(res => res.jogador_id === alvoId);
+                                const alvoUsouEscudo = respostaAlvo && respostaAlvo.buff_usado === 'escudo';
+                                
+                                const nomeAtacante = jogadoresMap[r.jogador_id]?.nome;
+                                const nomeAlvo = jogadoresMap[alvoId]?.nome;
+
+                                if (alvoUsouEscudo) {
+                                    eventoEspecial += `<br>🛡️ <b>${nomeAlvo}</b> usou o ESCUDO e bloqueou o Vampiro de <b>${nomeAtacante}</b>!`;
+                                } else {
+                                    // Vampiro rouba 50 pontos do alvo
+                                    ganhosDaRodada[r.jogador_id] += 50;
+                                    ganhosDaRodada[alvoId] -= 50;
+                                    eventoEspecial += `<br>🧛‍♂️ <b>${nomeAtacante}</b> sugou 50 pts de <b>${nomeAlvo}</b>!`;
+                                }
+                            }
+                        }
+
+                        // FASE 4: SALVAR NO BANCO (Impedindo saldo negativo)
+                        for (let id of Object.keys(ganhosDaRodada)) {
+                            let pts = ganhosDaRodada[id];
                             if (pts !== 0) {
-                                let jog = jogadoresMap[r.jogador_id];
-                                let novaP = Math.max(0, (jog.pontos || 0) + pts); // Nao deixa negativo
-                                await supabaseClient.from('jogadores').update({ pontos: novaP }).eq('id', r.jogador_id);
+                                let jog = jogadoresMap[id];
+                                let novaP = Math.max(0, (jog.pontos || 0) + pts); 
+                                
+                                await supabaseClient.from('jogadores').update({ pontos: novaP }).eq('id', id);
                                 if (pts > 0) pontosDistribuidos += pts;
                             }
                         }
                     }
                 }
 
+                // ==========================================
+                // FASE FINAL: EXIBIR INSIGHTS NA TELA
+                // ==========================================
                 document.getElementById('painel-insights').style.display = 'block';
                 document.getElementById('insight-texto').innerHTML = `
                     <strong>Correta:</strong> Letra ${correta} <br>
                     <strong>Acertos:</strong> ${acertos} de ${respostas.length}<br>
                     <strong>Pontos Distribuídos:</strong> ${pontosDistribuidos} pts<br>
-                    <span style="color:#ff0080; font-weight:bold;">${eventoEspecial}</span>
+                    <span style="color:#00f2fe; display:block; margin-top:10px;">${eventoEspecial}</span>
                 `;
                 
                 await carregarJogadores(); // Recarrega gráficos e lista
