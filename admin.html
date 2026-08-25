@@ -179,16 +179,22 @@
                 let acertos = 0;
                 let pontosDistribuidos = 0;
 
-                // Calcula os pontos (Matemática básica dos Buffs)
+                // Calcula os pontos 
                 for (let r of respostas) {
                     let pontosGanhos = 0;
                     
                     if (r.alternativa === correta) {
                         acertos++;
-                        pontosGanhos = 100; // Base: 100 pontos
-                        if (r.buff_usado === 'Dobro/Nada') pontosGanhos = 200;
-                    } 
-                    // Se errou com Dobro/Nada, perde pontos? Por enquanto ganha 0.
+                        pontosGanhos = 100; // Acerto Base: 100 pontos
+                        
+                        // Verifica os buffs pelo nome EXATO que o player envia
+                        if (r.buff_usado === 'dobro') {
+                            pontosGanhos = 200;
+                        }
+                    } else {
+                        // Se errou, ganha 0 (a menos que tenha usado escudo, que podemos programar depois)
+                        pontosGanhos = 0; 
+                    }
 
                     if (pontosGanhos > 0) {
                         pontosDistribuidos += pontosGanhos;
