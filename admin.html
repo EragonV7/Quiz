@@ -16,7 +16,8 @@
         .panel { background: #1a1532; border-radius: 16px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); }
         .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
         .panel h2 { color: #00f2fe; font-size: 18px; margin: 0; }
-        .btn-refresh { background: #2a204a; border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        .btn-refresh { background: #2a204a; border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        .btn-reset { background: #ff4b4b; border: 1px solid #ff4b4b; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; margin-right: 10px; }
         .controls { display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
         .input-modern { background: #231b42; color: #fff; border: 1px solid #00f2fe; padding: 10px; border-radius: 8px; font-size: 14px; outline: none; }
         .input-questao { background: #231b42; color: #fff; border: 2px solid #ff0080; padding: 10px; border-radius: 8px; font-size: 18px; width: 80px; text-align: center; font-weight: bold; outline: none; }
@@ -79,7 +80,10 @@
             <div class="panel">
                 <div class="panel-header">
                     <h2>Lobby & Ranking</h2>
-                    <button class="btn-refresh" onclick="carregarJogadores()">🔄 Atualizar</button>
+                    <div>
+                        <button class="btn-reset" onclick="resetarTudo()">⚠️ Resetar Tudo</button>
+                        <button class="btn-refresh" onclick="carregarJogadores()">🔄 Atualizar</button>
+                    </div>
                 </div>
                 <div class="player-list" id="players-list"><div class="empty-msg">Carregando jogadores...</div></div>
             </div>
@@ -257,6 +261,8 @@
         }
 
         async function encerrarSecaoBonus() {
+            if (!confirm("Isso vai dar 1 Buff (Energia) para o último colocado. Tem certeza?")) return;
+
             let rankArr = Object.values(jogadoresMap).sort((a,b) => (a.pontos||0) - (b.pontos||0));
             if (rankArr.length === 0) return alert("Nenhum jogador encontrado!");
 
@@ -329,31 +335,53 @@
 
         async function aplicarPoderDivino(tipo) {
             const id = document.getElementById('admin-alvo').value;
-            const ptsInput = parseInt(document.getElementById('admin-pontos').value) || 0;
+            // O Math.abs garante que o número lido seja SEMPRE positivo, corrigindo bugs de sinal
+            const ptsInput = Math.abs(parseInt(document.getElementById('admin-pontos').value) || 0); 
             if (!id) return alert("Selecione um jogador!");
             
             let nj = jogadoresMap[id];
             let nvPontos = nj.pontos || 0;
             let nvEnergia = nj.energia || 0;
-            let msg = "";
+            let confirmMsg = "";
+            let alertMsg = "";
 
             if (tipo === 'pontos') {
                 nvPontos += ptsInput;
-                msg = `${nj.nome} recebeu +${ptsInput} pontos!`;
+                confirmMsg = `Deseja dar +${ptsInput} pontos para ${nj.nome}?`;
+                alertMsg = `🎁 ${nj.nome} recebeu os pontos!`;
             } else if (tipo === 'energia') {
                 nvEnergia += 1;
-                msg = `${nj.nome} recebeu +1 Buff/Energia!`;
+                confirmMsg = `Deseja dar +1 Buff/Energia para ${nj.nome}?`;
+                alertMsg = `⚡ ${nj.nome} recebeu a energia!`;
             } else if (tipo === 'combo') {
                 nvPontos += ptsInput;
                 nvEnergia += 1;
-                msg = `${nj.nome} recebeu +${ptsInput} pontos E +1 Buff/Energia!`;
+                confirmMsg = `Deseja dar +${ptsInput} pontos e +1 Buff para ${nj.nome}?`;
+                alertMsg = `🎁⚡ Combo entregue para ${nj.nome}!`;
             } else if (tipo === 'punir') {
-                nvPontos = Math.max(0, nvPontos - ptsInput);
-                msg = `${nj.nome} foi punido em -${ptsInput} pontos!`;
+                nvPontos = Math.max(0, nvPontos - ptsInput); // Nunca deixa ficar negativo
+                confirmMsg = `☠️ CUIDADO: Deseja TIRAR ${ptsInput} pontos de ${nj.nome}?`;
+                alertMsg = `☠️ ${nj.nome} foi punido e perdeu os pontos!`;
             }
             
+            if (!confirm(confirmMsg)) return; // <-- O famigerado Double Check!
+
             await supabaseClient.from('jogadores').update({ pontos: nvPontos, energia: nvEnergia }).eq('id', id);
-            alert(msg);
+            alert(alertMsg);
+            carregarJogadores();
+        }
+
+        async function resetarTudo() {
+            // Dois alertas de segurança pra não zerar nada sem querer
+            if (!confirm("⚠️ ALERTA VERMELHO!\n\nVocê está prestes a ZERAR os pontos e buffs de TODOS os jogadores.\nIsso não pode ser desfeito. Tem certeza?")) return;
+            if (!confirm("Último aviso: Clicando em OK, o jogo inteiro voltará para ZERO. Quer mesmo fazer isso?")) return;
+
+            const ids = Object.keys(jogadoresMap);
+            for (let id of ids) {
+                await supabaseClient.from('jogadores').update({ pontos: 0, energia: 0 }).eq('id', id);
+            }
+            
+            alert("♻️ Jogo resetado com sucesso! Todos os jogadores voltaram à estaca zero.");
             carregarJogadores();
         }
 
