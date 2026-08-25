@@ -73,6 +73,15 @@
         .btn-primary:active { transform: scale(0.98); }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
+        /* NOVO: Estilo para o botão de confirmar resposta */
+        #btn-confirmar-resposta {
+            background: linear-gradient(135deg, #00f2fe, #4facfe);
+            color: #000;
+            box-shadow: 0 4px 15px rgba(0,242,254,0.4);
+            display: none;
+            width: 100%;
+        }
+
         #screen-game { display: none; flex-direction: column; gap: 16px; }
         .player-header { display: flex; align-items: center; justify-content: space-between; background: #231b42; padding: 12px 16px; border-radius: 16px; }
         .player-info { display: flex; align-items: center; gap: 10px; }
@@ -106,14 +115,27 @@
         .buff-icon { font-size: 18px; }
 
         .answers-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+        
         .btn-answer {
             width: 100%; padding: 18px; border-radius: 16px; border: none; color: white; font-size: 20px;
             font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: transform 0.1s, opacity 0.2s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: all 0.2s;
         }
         .btn-answer:active { transform: scale(0.97); }
         .btn-answer:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(80%); }
-        .btn-answer.hidden-5050 { display: none; }
+        .btn-answer.hidden-5050 { display: none !important; }
+
+        /* NOVO: Estilos de Seleção das Alternativas */
+        .btn-answer.selected {
+            border: 4px solid #fff;
+            transform: scale(1.03);
+            box-shadow: 0 0 20px rgba(255,255,255,0.6);
+            z-index: 2;
+        }
+        .btn-answer.not-selected {
+            opacity: 0.4;
+            filter: grayscale(60%);
+        }
 
         .btn-a { background: linear-gradient(135deg, #ff416c, #ff4b2b); }
         .btn-b { background: linear-gradient(135deg, #2193b0, #6dd5ed); }
@@ -217,12 +239,17 @@
             </div>
 
             <div class="answers-grid" id="answersGrid">
-                <button class="btn-answer btn-a" onclick="enviarResposta('A')"><span>A</span> <span>&gt;</span></button>
-                <button class="btn-answer btn-b" onclick="enviarResposta('B')"><span>B</span> <span>&gt;</span></button>
-                <button class="btn-answer btn-c" onclick="enviarResposta('C')"><span>C</span> <span>&gt;</span></button>
-                <button class="btn-answer btn-d" onclick="enviarResposta('D')"><span>D</span> <span>&gt;</span></button>
-                <button class="btn-answer btn-e" onclick="enviarResposta('E')"><span>E</span> <span>&gt;</span></button>
+                <!-- Agora usamos a função selecionarResposta ao invés de enviar direto -->
+                <button class="btn-answer btn-a" onclick="selecionarResposta('A')"><span>A</span> <span>&gt;</span></button>
+                <button class="btn-answer btn-b" onclick="selecionarResposta('B')"><span>B</span> <span>&gt;</span></button>
+                <button class="btn-answer btn-c" onclick="selecionarResposta('C')"><span>C</span> <span>&gt;</span></button>
+                <button class="btn-answer btn-d" onclick="selecionarResposta('D')"><span>D</span> <span>&gt;</span></button>
+                <button class="btn-answer btn-e" onclick="selecionarResposta('E')"><span>E</span> <span>&gt;</span></button>
             </div>
+            
+            <!-- NOVO: Botão de confirmação -->
+            <button id="btn-confirmar-resposta" class="btn-primary" onclick="enviarRespostaFinal()">CONFIRMAR RESPOSTA</button>
+
         </div>
     </div>
 
@@ -268,6 +295,9 @@
         let perguntaAtualId = null;
         let statusPartida = 'aguardando_jogadores';
         
+        // NOVO: Controle de qual letra o usuário selecionou antes de confirmar
+        let alternativaSelecionada = null; 
+
         let buffSelecionado = null; // O buff que foi confirmado para a rodada atual
         let alvoSelecionado = null; // O alvo confirmado para a rodada atual
         let buffEmEdicao = null;    // O buff que está aberto no Modal no momento
@@ -426,8 +456,10 @@
                 if (perguntaAtualId !== window.perguntaAnteriorId) {
                     // RESET DA RODADA NOVA
                     respostaEnviada = false;
+                    alternativaSelecionada = null; // Zera a seleção
                     buffSelecionado = null;
                     alvoSelecionado = null;
+                    document.getElementById('btn-confirmar-resposta').style.display = 'none'; // Esconde botão
                     atualizarContadorBuffs();
                     resetVisualBotoes();
                 }
@@ -439,13 +471,14 @@
                 if (data) {
                     respostaEnviada = true;
                     setButtonsEnabled(false);
-                    info.innerText = `Resposta já enviada [ ${data.alternativa} ]!`;
+                    info.innerText = `Resposta confirmada [ ${data.alternativa} ]!`;
                 } else {
                     info.innerText = "Escolha sua opção:";
                     setButtonsEnabled(true);
                 }
             } else {
-                fecharModalBuff(); // Força fechar modal se acabar o tempo
+                fecharModalBuff(); 
+                document.getElementById('btn-confirmar-resposta').style.display = 'none'; // Esconde na hora que o tempo acaba
                 badge.className = (estado.status === 'tempo_esgotado') ? "status-badge status-locked" : "status-badge status-waiting";
                 badge.innerText = (estado.status === 'tempo_esgotado') ? "TRAVADO" : "AGUARDE";
                 info.innerText = (estado.status === 'tempo_esgotado') ? "Tempo encerrado!" : "Aguardando próxima pergunta...";
@@ -460,17 +493,13 @@
         }
 
         function resetVisualBotoes() {
-            document.querySelectorAll('.btn-answer').forEach(b => { b.classList.remove('hidden-5050'); b.disabled = false; });
+            document.querySelectorAll('.btn-answer').forEach(b => { 
+                b.classList.remove('hidden-5050', 'selected', 'not-selected'); 
+                b.disabled = false; 
+            });
             document.querySelectorAll('.buff-card').forEach(c => {
                 if (!buffsUsados.has(c.id.replace('buff-', ''))) c.classList.remove('selected');
             });
-        }
-
-        function atualizarContadorBuffs() {
-            const disponiveis = TOTAL_BUFFS - buffsUsados.size;
-            const label = document.getElementById('buff-active-label');
-            if (buffSelecionado) label.innerText = `Buff ativo na rodada!`;
-            else label.innerText = `${disponiveis}/${TOTAL_BUFFS} disponíveis`;
         }
 
         // =========================================
@@ -478,7 +507,7 @@
         // =========================================
         async function abrirModalBuff(buffKey) {
             if (respostaEnviada || statusPartida !== 'aceitando_respostas') return;
-            if (buffsUsados.has(buffKey)) return; // Já usou este buff no jogo
+            if (buffsUsados.has(buffKey)) return; 
             if (buffSelecionado) return alert("Você já escolheu um buff para usar nesta rodada! Só é permitido 1 por rodada.");
 
             buffEmEdicao = buffKey;
@@ -545,8 +574,9 @@
 
         function executarChuteCego() {
             const opes = ['A', 'B', 'C', 'D', 'E'];
-            buffSelecionado = 'chute'; // trava p/ insert
-            enviarResposta(opes[Math.floor(Math.random() * opes.length)]);
+            buffSelecionado = 'chute'; 
+            alternativaSelecionada = opes[Math.floor(Math.random() * opes.length)];
+            enviarRespostaFinal(); // Chute cego não pede confirmação, ele atira direto!
         }
 
         function executar5050() {
@@ -559,17 +589,47 @@
             btns[1].classList.add('hidden-5050');
         }
 
-        async function enviarResposta(alternativa) {
+        // =========================================
+        // NOVO: LÓGICA DE SELECIONAR E CONFIRMAR
+        // =========================================
+        
+        function selecionarResposta(alternativa) {
             if (respostaEnviada || statusPartida !== 'aceitando_respostas') return;
+            
+            alternativaSelecionada = alternativa;
+            
+            // Lógica de Feedback Visual (Destaque para a selecionada)
+            document.querySelectorAll('.btn-answer').forEach(btn => {
+                btn.classList.remove('selected', 'not-selected');
+                
+                // O primeiro 'span' de cada botão contém a letra (A, B, C...)
+                if (btn.querySelector('span').innerText === alternativa) {
+                    btn.classList.add('selected');
+                } else {
+                    btn.classList.add('not-selected');
+                }
+            });
 
+            // Mostra o botão de confirmação e atualiza o texto dele
+            const btnConfirm = document.getElementById('btn-confirmar-resposta');
+            btnConfirm.style.display = 'block';
+            btnConfirm.innerText = `CONFIRMAR LETRA ${alternativa}`;
+        }
+
+        async function enviarRespostaFinal() {
+            if (!alternativaSelecionada || respostaEnviada || statusPartida !== 'aceitando_respostas') return;
+
+            const alternativa = alternativaSelecionada;
             respostaEnviada = true;
             setButtonsEnabled(false);
-            document.getElementById('round-info').innerText = `Opção [ ${alternativa} ] enviada!`;
+            
+            // Esconde o botão de confirmação e avisa que enviou
+            document.getElementById('btn-confirmar-resposta').style.display = 'none';
+            document.getElementById('round-info').innerText = `Opção [ ${alternativa} ] confirmada!`;
 
             const buffUsadoNesta = buffSelecionado;
             const alvoDesta = alvoSelecionado;
 
-            // Marca visualmente como usado no perfil
             if (buffUsadoNesta) {
                 buffsUsados.add(buffUsadoNesta);
                 document.getElementById('buff-' + buffUsadoNesta).classList.remove('selected');
@@ -579,7 +639,7 @@
                 atualizarContadorBuffs();
             }
 
-            // INSERE NO BANCO - ATENÇÃO: a tabela respostas_rodada agora precisará da coluna alvo_id
+            // INSERE NO BANCO 
             await supabaseClient.from('respostas_rodada').insert([{
                 jogador_id: jogadorAtual.id,
                 pergunta_id: perguntaAtualId || 'Q_ATUAL',
