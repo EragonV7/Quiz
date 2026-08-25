@@ -17,20 +17,24 @@
         .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
         .panel h2 { color: #00f2fe; font-size: 18px; margin: 0; }
         .btn-refresh { background: #2a204a; border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
-        .controls { display: flex; gap: 10px; justify-content: space-between; align-items: center; }
+        .controls { display: flex; gap: 10px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
         .input-modern { background: #231b42; color: #fff; border: 1px solid #00f2fe; padding: 10px; border-radius: 8px; font-size: 14px; outline: none; }
         .input-questao { background: #231b42; color: #fff; border: 2px solid #ff0080; padding: 10px; border-radius: 8px; font-size: 18px; width: 80px; text-align: center; font-weight: bold; outline: none; }
-        button.action-btn { flex: 1; padding: 15px; border-radius: 12px; border: none; font-size: 14px; font-weight: 700; cursor: pointer; color: white; transition: transform 0.1s; }
+        button.action-btn { flex: 1; padding: 15px; border-radius: 12px; border: none; font-size: 14px; font-weight: 700; cursor: pointer; color: white; transition: transform 0.1s; min-width: 120px; }
         button.action-btn:active { transform: scale(0.97); }
         .btn-wait { background: #f39c12; }
         .btn-start { background: #00f2fe; color: #000; }
         .btn-stop { background: #ff4b4b; }
-        .btn-divino { padding: 10px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; flex: 1; }
+        .btn-secao { background: #7928ca; color: #fff; }
+        .btn-divino { padding: 8px 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; flex: 1; font-size: 12px; }
         .data-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
         .player-list { display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto; }
         .player-item { display: flex; align-items: center; justify-content: space-between; background: #231b42; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .player-info { display: flex; align-items: center; gap: 10px; }
         .player-info img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid #00f2fe; }
+        .player-details { display: flex; flex-direction: column; }
+        .player-name { font-weight: 700; font-size: 14px; }
+        .player-buffs { font-size: 11px; color: #00f2fe; font-weight: 600; }
         .player-pts { font-weight: 900; color: #f7971e; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
         th, td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
@@ -62,6 +66,7 @@
                 <button class="action-btn btn-wait" onclick="prepararRodada()">1. Preparar</button>
                 <button class="action-btn btn-start" onclick="liberarValendo()">2. Valendo!</button>
                 <button class="action-btn btn-stop" onclick="encerrarECalcular()">3. Encerrar & Calcular</button>
+                <button class="action-btn btn-secao" onclick="encerrarSecaoBonus()">🏁 Fim de Seção (+1 Buff p/ Último)</button>
             </div>
             <p id="current-status">Status atual: Conectando...</p>
             <div id="painel-insights" class="insights">
@@ -90,12 +95,14 @@
 
         <!-- MODO DEUS & GRÁFICOS -->
         <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-            <div class="panel" style="flex: 1; min-width: 300px;">
-                <h3 style="color: #ff0080; margin-bottom: 10px;">⚡ Controle Divino</h3>
+            <div class="panel" style="flex: 1; min-width: 320px;">
+                <h3 style="color: #ff0080; margin-bottom: 10px;">⚡ Controle Divino (Recompensas e Punições)</h3>
                 <select id="admin-alvo" class="input-modern" style="width: 100%; margin-bottom: 10px;"></select>
-                <input type="number" id="admin-pontos" class="input-modern" placeholder="Pontos (Ex: 50)" style="width: 100%; margin-bottom: 10px;">
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn-divino" style="background:#00f2fe; color:#000;" onclick="aplicarPoderDivino('buff')">Dar Pontos 🎁</button>
+                <input type="number" id="admin-pontos" class="input-modern" placeholder="Pontos extras (Ex: 50)" style="width: 100%; margin-bottom: 10px;">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn-divino" style="background:#00f2fe; color:#000;" onclick="aplicarPoderDivino('pontos')">+ Pontos 🎁</button>
+                    <button class="btn-divino" style="background:#7928ca; color:#fff;" onclick="aplicarPoderDivino('energia')">+1 Buff ⚡</button>
+                    <button class="btn-divino" style="background:#ff0080; color:#fff;" onclick="aplicarPoderDivino('combo')">Pontos + Buff 🎁⚡</button>
                     <button class="btn-divino" style="background:#ff4b4b; color:#fff;" onclick="aplicarPoderDivino('punir')">Punir ☠️</button>
                 </div>
             </div>
@@ -159,36 +166,27 @@
                 const correta = gabarito.resposta_correta;
 
                 const { data: respostas } = await supabaseClient.from('respostas_rodada').select('*').eq('pergunta_id', questaoNum);
-                
                 let eventoEspecial = "";
 
-                // ==========================================
-                // FASE 0: RESOLVER BUFFS DE CÓPIA (MARIA)
-                // ==========================================
+                // RESOLVER COPIAR (MARIA)
                 for (let r of respostas) {
                     if (r.buff_usado === 'maria' && r.alvo_id) {
                         const respostaAlvo = respostas.find(res => res.jogador_id === r.alvo_id);
                         if (respostaAlvo) {
-                            r.alternativa = respostaAlvo.alternativa; // Copia a resposta do alvo silenciosamente!
+                            r.alternativa = respostaAlvo.alternativa;
                             eventoEspecial += `<br>👯 <b>${jogadoresMap[r.jogador_id]?.nome}</b> copiou a resposta de <b>${jogadoresMap[r.alvo_id]?.nome}</b>!`;
                         }
                     }
                 }
 
-                // Conta os acertos REAIS após as cópias
                 let acertos = 0;
                 respostas.forEach(r => { if (r.alternativa === correta) acertos++; });
-                
                 let pontosDistribuidos = 0;
 
-                // ==========================================
-                // FASE 1: MATEMÁTICA BASE E ESCASSEZ
-                // ==========================================
                 if (respostas.length > 0) {
                     if (acertos === respostas.length) {
-                        eventoEspecial += "<br>😴 Fácil demais! Todos acertaram, ninguém pontua.";
+                        eventoEspecial += "<br>😴 Todos acertaram, ninguém pontua.";
                     } else if (acertos === 0) {
-                        // Todos erraram: Piedade pro último colocado
                         let rankArr = Object.values(jogadoresMap).sort((a,b) => (a.pontos||0) - (b.pontos||0));
                         if(rankArr.length > 0) {
                             let ultimo = rankArr[0];
@@ -198,25 +196,23 @@
                             eventoEspecial += `<br>😭 Todos erraram! 10 pts de consolação para ${ultimo.nome}.`;
                         }
                     } else {
-                        // Calcula pontos base (Ex: 1 acerto = 100, 2 acertos = 90)
+                        // Pontuação normal de escassez
                         let pontosBase = Math.max(10, 100 - ((acertos - 1) * 10));
                         let ganhosDaRodada = {}; 
                         Object.keys(jogadoresMap).forEach(id => ganhosDaRodada[id] = 0);
 
-                        // FASE 2: PONTUAÇÃO INDIVIDUAL (Dobro e Escudo Base)
                         for (let r of respostas) {
                             let pts = 0;
                             if (r.alternativa === correta) {
                                 pts = pontosBase;
                                 if (r.buff_usado === 'dobro') pts *= 2;
                             } else {
-                                if (r.buff_usado === 'dobro') pts = -(pontosBase * 2); // Perde em dobro!
-                                if (r.buff_usado === 'escudo') pts = 0; // Escudo anula perdas globais
+                                if (r.buff_usado === 'dobro') pts = -(pontosBase * 2);
+                                if (r.buff_usado === 'escudo') pts = 0;
                             }
                             ganhosDaRodada[r.jogador_id] += pts;
                         }
 
-                        // FASE 3: ATAQUES ENTRE JOGADORES (Vampiro vs Escudo)
                         for (let r of respostas) {
                             if (r.buff_usado === 'vampiro' && r.alternativa === correta && r.alvo_id) {
                                 const alvoId = r.alvo_id;
@@ -227,9 +223,8 @@
                                 const nomeAlvo = jogadoresMap[alvoId]?.nome;
 
                                 if (alvoUsouEscudo) {
-                                    eventoEspecial += `<br>🛡️ <b>${nomeAlvo}</b> usou o ESCUDO e bloqueou o Vampiro de <b>${nomeAtacante}</b>!`;
+                                    eventoEspecial += `<br>🛡️ <b>${nomeAlvo}</b> bloqueou o Vampiro de <b>${nomeAtacante}</b>!`;
                                 } else {
-                                    // Vampiro rouba 50 pontos do alvo
                                     ganhosDaRodada[r.jogador_id] += 50;
                                     ganhosDaRodada[alvoId] -= 50;
                                     eventoEspecial += `<br>🧛‍♂️ <b>${nomeAtacante}</b> sugou 50 pts de <b>${nomeAlvo}</b>!`;
@@ -237,13 +232,11 @@
                             }
                         }
 
-                        // FASE 4: SALVAR NO BANCO (Impedindo saldo negativo)
                         for (let id of Object.keys(ganhosDaRodada)) {
                             let pts = ganhosDaRodada[id];
                             if (pts !== 0) {
                                 let jog = jogadoresMap[id];
                                 let novaP = Math.max(0, (jog.pontos || 0) + pts); 
-                                
                                 await supabaseClient.from('jogadores').update({ pontos: novaP }).eq('id', id);
                                 if (pts > 0) pontosDistribuidos += pts;
                             }
@@ -251,9 +244,6 @@
                     }
                 }
 
-                // ==========================================
-                // FASE FINAL: EXIBIR INSIGHTS NA TELA
-                // ==========================================
                 document.getElementById('painel-insights').style.display = 'block';
                 document.getElementById('insight-texto').innerHTML = `
                     <strong>Correta:</strong> Letra ${correta} <br>
@@ -262,8 +252,25 @@
                     <span style="color:#00f2fe; display:block; margin-top:10px;">${eventoEspecial}</span>
                 `;
                 
-                await carregarJogadores(); // Recarrega gráficos e lista
+                await carregarJogadores();
             } catch (err) { console.error(err); }
+        }
+
+        async function encerrarSecaoBonus() {
+            let rankArr = Object.values(jogadoresMap).sort((a,b) => (a.pontos||0) - (b.pontos||0));
+            if (rankArr.length === 0) return alert("Nenhum jogador encontrado!");
+
+            let ultimo = rankArr[0];
+            let novaEnergia = (ultimo.energia || 0) + 1;
+
+            await supabaseClient.from('jogadores').update({ energia: novaEnergia }).eq('id', ultimo.id);
+
+            document.getElementById('painel-insights').style.display = 'block';
+            document.getElementById('insight-texto').innerHTML = `
+                <strong style="color:#ff0080; font-size:16px;">🏁 SEÇÃO ENCERRADA!</strong><br>
+                ⚡ <b>${ultimo.nome}</b> (último colocado com ${ultimo.pontos || 0} pts) recebeu <b>+1 Buff/Energia</b> de bônus!
+            `;
+            await carregarJogadores();
         }
 
         async function carregarJogadores() {
@@ -273,17 +280,28 @@
                 const list = document.getElementById('players-list');
                 list.innerHTML = '';
                 
-                let options = '<option value="">Selecione...</option>';
+                let options = '<option value="">Selecione um jogador...</option>';
                 let nomes = [], pontos = [];
 
                 data.forEach(j => {
                     jogadoresMap[j.id] = j;
                     nomes.push(j.nome);
                     pontos.push(j.pontos || 0);
-                    options += `<option value="${j.id}">${j.nome}</option>`;
+                    options += `<option value="${j.id}">${j.nome} (${j.pontos || 0} pts | ⚡${j.energia || 0})</option>`;
                     
                     const foto = (j.foto_url && !j.foto_url.includes('placeholder')) ? j.foto_url : getAvatarFallback(j.nome);
-                    list.innerHTML += `<div class="player-item"><div class="player-info"><img src="${foto}"><span>${j.nome}</span></div><span class="player-pts">${j.pontos || 0} pts</span></div>`;
+                    list.innerHTML += `
+                        <div class="player-item">
+                            <div class="player-info">
+                                <img src="${foto}">
+                                <div class="player-details">
+                                    <span class="player-name">${j.nome}</span>
+                                    <span class="player-buffs">⚡ ${j.energia || 0} Buffs Disponíveis</span>
+                                </div>
+                            </div>
+                            <span class="player-pts">${j.pontos || 0} pts</span>
+                        </div>
+                    `;
                 });
 
                 document.getElementById('admin-alvo').innerHTML = options;
@@ -309,16 +327,33 @@
             }
         }
 
-        async function aplicarPoderDivino(acao) {
+        async function aplicarPoderDivino(tipo) {
             const id = document.getElementById('admin-alvo').value;
-            const pts = parseInt(document.getElementById('admin-pontos').value);
-            if (!id || !pts) return alert("Preencha corretamente!");
+            const ptsInput = parseInt(document.getElementById('admin-pontos').value) || 0;
+            if (!id) return alert("Selecione um jogador!");
             
             let nj = jogadoresMap[id];
-            let nv = acao === 'buff' ? (nj.pontos || 0) + pts : Math.max(0, (nj.pontos || 0) - pts);
+            let nvPontos = nj.pontos || 0;
+            let nvEnergia = nj.energia || 0;
+            let msg = "";
+
+            if (tipo === 'pontos') {
+                nvPontos += ptsInput;
+                msg = `${nj.nome} recebeu +${ptsInput} pontos!`;
+            } else if (tipo === 'energia') {
+                nvEnergia += 1;
+                msg = `${nj.nome} recebeu +1 Buff/Energia!`;
+            } else if (tipo === 'combo') {
+                nvPontos += ptsInput;
+                nvEnergia += 1;
+                msg = `${nj.nome} recebeu +${ptsInput} pontos E +1 Buff/Energia!`;
+            } else if (tipo === 'punir') {
+                nvPontos = Math.max(0, nvPontos - ptsInput);
+                msg = `${nj.nome} foi punido em -${ptsInput} pontos!`;
+            }
             
-            await supabaseClient.from('jogadores').update({ pontos: nv }).eq('id', id);
-            alert(`${nj.nome} ${acao === 'buff' ? 'ganhou' : 'perdeu'} ${pts} pontos!`);
+            await supabaseClient.from('jogadores').update({ pontos: nvPontos, energia: nvEnergia }).eq('id', id);
+            alert(msg);
             carregarJogadores();
         }
 
