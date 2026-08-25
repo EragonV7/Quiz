@@ -194,7 +194,7 @@
                         let rankArr = Object.values(jogadoresMap).sort((a,b) => (a.pontos||0) - (b.pontos||0));
                         if(rankArr.length > 0) {
                             let ultimo = rankArr[0];
-                            let nv = (ultimo.pontos || 0) + 10;
+                            let nv = parseInt(ultimo.pontos || 0) + 10;
                             await supabaseClient.from('jogadores').update({ pontos: nv }).eq('id', ultimo.id);
                             pontosDistribuidos = 10;
                             eventoEspecial += `<br>😭 Todos erraram! 10 pts de consolação para ${ultimo.nome}.`;
@@ -240,8 +240,8 @@
                             let pts = ganhosDaRodada[id];
                             if (pts !== 0) {
                                 let jog = jogadoresMap[id];
-                                let novaP = Math.max(0, (jog.pontos || 0) + pts); 
-                                await supabaseClient.from('jogadores').update({ pontos: novaP }).eq('id', id);
+                                let novaP = Math.max(0, parseInt(jog.pontos || 0) + pts); 
+                                await supabaseClient.from('jogadores').update({ pontos: novaP }).eq('id', jog.id);
                                 if (pts > 0) pontosDistribuidos += pts;
                             }
                         }
@@ -267,7 +267,7 @@
             if (rankArr.length === 0) return alert("Nenhum jogador encontrado!");
 
             let ultimo = rankArr[0];
-            let novaEnergia = (ultimo.energia || 0) + 1;
+            let novaEnergia = parseInt(ultimo.energia || 0) + 1;
 
             await supabaseClient.from('jogadores').update({ energia: novaEnergia }).eq('id', ultimo.id);
 
@@ -292,8 +292,8 @@
                 data.forEach(j => {
                     jogadoresMap[j.id] = j;
                     nomes.push(j.nome);
-                    pontos.push(j.pontos || 0);
-                    options += `<option value="${j.id}">${j.nome} (${j.pontos || 0} pts | ⚡${j.energia || 0})</option>`;
+                    pontos.push(parseInt(j.pontos) || 0);
+                    options += `<option value="${j.id}">${j.nome} (${parseInt(j.pontos) || 0} pts | ⚡${parseInt(j.energia) || 0})</option>`;
                     
                     const foto = (j.foto_url && !j.foto_url.includes('placeholder')) ? j.foto_url : getAvatarFallback(j.nome);
                     list.innerHTML += `
@@ -302,10 +302,10 @@
                                 <img src="${foto}">
                                 <div class="player-details">
                                     <span class="player-name">${j.nome}</span>
-                                    <span class="player-buffs">⚡ ${j.energia || 0} Buffs Disponíveis</span>
+                                    <span class="player-buffs">⚡ ${parseInt(j.energia) || 0} Buffs Disponíveis</span>
                                 </div>
                             </div>
-                            <span class="player-pts">${j.pontos || 0} pts</span>
+                            <span class="player-pts">${parseInt(j.pontos) || 0} pts</span>
                         </div>
                     `;
                 });
@@ -334,55 +334,80 @@
         }
 
         async function aplicarPoderDivino(tipo) {
-            const id = document.getElementById('admin-alvo').value;
-            // O Math.abs garante que o número lido seja SEMPRE positivo, corrigindo bugs de sinal
-            const ptsInput = Math.abs(parseInt(document.getElementById('admin-pontos').value) || 0); 
-            if (!id) return alert("Selecione um jogador!");
-            
-            let nj = jogadoresMap[id];
-            let nvPontos = nj.pontos || 0;
-            let nvEnergia = nj.energia || 0;
-            let confirmMsg = "";
-            let alertMsg = "";
+            try {
+                const idSelecionado = document.getElementById('admin-alvo').value;
+                const ptsInput = Math.abs(parseInt(document.getElementById('admin-pontos').value)) || 0; 
+                
+                // Validação severa de Segurança (Se não tiver jogador selecionado)
+                if (!idSelecionado) {
+                    alert("⚠️ ALERTA: Você precisa SELECIONAR UM JOGADOR na lista acima antes de clicar no botão!");
+                    return;
+                }
 
-            if (tipo === 'pontos') {
-                nvPontos += ptsInput;
-                confirmMsg = `Deseja dar +${ptsInput} pontos para ${nj.nome}?`;
-                alertMsg = `🎁 ${nj.nome} recebeu os pontos!`;
-            } else if (tipo === 'energia') {
-                nvEnergia += 1;
-                confirmMsg = `Deseja dar +1 Buff/Energia para ${nj.nome}?`;
-                alertMsg = `⚡ ${nj.nome} recebeu a energia!`;
-            } else if (tipo === 'combo') {
-                nvPontos += ptsInput;
-                nvEnergia += 1;
-                confirmMsg = `Deseja dar +${ptsInput} pontos e +1 Buff para ${nj.nome}?`;
-                alertMsg = `🎁⚡ Combo entregue para ${nj.nome}!`;
-            } else if (tipo === 'punir') {
-                nvPontos = Math.max(0, nvPontos - ptsInput); // Nunca deixa ficar negativo
-                confirmMsg = `☠️ CUIDADO: Deseja TIRAR ${ptsInput} pontos de ${nj.nome}?`;
-                alertMsg = `☠️ ${nj.nome} foi punido e perdeu os pontos!`;
+                let nj = jogadoresMap[idSelecionado];
+                let nvPontos = parseInt(nj.pontos) || 0;
+                let nvEnergia = parseInt(nj.energia) || 0;
+                let confirmMsg = "";
+                let alertMsg = "";
+
+                if (tipo === 'pontos') {
+                    if (ptsInput === 0) return alert("⚠️ Digite um valor maior que zero!");
+                    nvPontos += ptsInput;
+                    confirmMsg = `Deseja dar +${ptsInput} pontos para ${nj.nome}?`;
+                    alertMsg = `🎁 ${nj.nome} recebeu os pontos!`;
+                } else if (tipo === 'energia') {
+                    nvEnergia += 1;
+                    confirmMsg = `Deseja dar +1 Buff/Energia para ${nj.nome}?`;
+                    alertMsg = `⚡ ${nj.nome} recebeu a energia!`;
+                } else if (tipo === 'combo') {
+                    if (ptsInput === 0) return alert("⚠️ Digite um valor maior que zero!");
+                    nvPontos += ptsInput;
+                    nvEnergia += 1;
+                    confirmMsg = `Deseja dar +${ptsInput} pontos e +1 Buff para ${nj.nome}?`;
+                    alertMsg = `🎁⚡ Combo entregue para ${nj.nome}!`;
+                } else if (tipo === 'punir') {
+                    if (ptsInput === 0) return alert("⚠️ Digite um valor maior que zero para poder punir!");
+                    nvPontos = Math.max(0, nvPontos - ptsInput); 
+                    confirmMsg = `☠️ CUIDADO: Deseja TIRAR ${ptsInput} pontos de ${nj.nome}?`;
+                    alertMsg = `☠️ ${nj.nome} foi punido e perdeu os pontos!`;
+                }
+                
+                if (!confirm(confirmMsg)) return;
+
+                // Passa o ID exato que veio do banco de dados (evita bug de tipagem string vs int)
+                const { error } = await supabaseClient.from('jogadores').update({ pontos: nvPontos, energia: nvEnergia }).eq('id', nj.id);
+                
+                if (error) throw error;
+                
+                alert(alertMsg);
+                document.getElementById('admin-pontos').value = ''; // Limpa o campo automaticamente
+                await carregarJogadores(); // Aguarda o carregamento concluir para redesenhar a tela
+
+            } catch (err) {
+                console.error("Erro no controle divino:", err);
+                alert("Ocorreu um erro ao atualizar os dados. Veja o painel de desenvolvedor (F12).");
             }
-            
-            if (!confirm(confirmMsg)) return; // <-- O famigerado Double Check!
-
-            await supabaseClient.from('jogadores').update({ pontos: nvPontos, energia: nvEnergia }).eq('id', id);
-            alert(alertMsg);
-            carregarJogadores();
         }
 
         async function resetarTudo() {
-            // Dois alertas de segurança pra não zerar nada sem querer
             if (!confirm("⚠️ ALERTA VERMELHO!\n\nVocê está prestes a ZERAR os pontos e buffs de TODOS os jogadores.\nIsso não pode ser desfeito. Tem certeza?")) return;
             if (!confirm("Último aviso: Clicando em OK, o jogo inteiro voltará para ZERO. Quer mesmo fazer isso?")) return;
 
-            const ids = Object.keys(jogadoresMap);
-            for (let id of ids) {
-                await supabaseClient.from('jogadores').update({ pontos: 0, energia: 0 }).eq('id', id);
+            try {
+                // Cria uma promessa de atualização simultânea para CADA jogador usando o ID original numérico
+                const promessas = Object.values(jogadoresMap).map(jogador => {
+                    return supabaseClient.from('jogadores').update({ pontos: 0, energia: 0 }).eq('id', jogador.id);
+                });
+                
+                // Dispara todas as atualizações de uma vez
+                await Promise.all(promessas);
+                
+                alert("♻️ Jogo resetado com sucesso! Todos os jogadores voltaram à estaca zero.");
+                await carregarJogadores();
+            } catch (err) {
+                console.error("Erro ao resetar banco de dados:", err);
+                alert("Erro ao tentar resetar! Veja o log (F12).");
             }
-            
-            alert("♻️ Jogo resetado com sucesso! Todos os jogadores voltaram à estaca zero.");
-            carregarJogadores();
         }
 
         function compararRivais() {
@@ -391,8 +416,10 @@
             if(!r1 || !r2 || r1 === r2) return;
             
             const j1 = jogadoresMap[r1], j2 = jogadoresMap[r2];
-            const diff = Math.abs(j1.pontos - j2.pontos);
-            const lider = j1.pontos > j2.pontos ? j1.nome : (j2.pontos > j1.pontos ? j2.nome : "Empate");
+            const diff = Math.abs((parseInt(j1.pontos)||0) - (parseInt(j2.pontos)||0));
+            const p1 = parseInt(j1.pontos)||0;
+            const p2 = parseInt(j2.pontos)||0;
+            const lider = p1 > p2 ? j1.nome : (p2 > p1 ? j2.nome : "Empate");
             
             document.getElementById('resultado-comparacao').innerHTML = `Diferença: <span style="color:#00f2fe; font-size:20px;">${diff} pts</span><br>Líder: ${lider}`;
         }
