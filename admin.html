@@ -5,49 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quiz Party - Painel do Host 👑</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
         body { background-color: #0b0914; color: #ffffff; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        
         .admin-container { width: 100%; max-width: 1000px; display: grid; gap: 20px; }
         .header { text-align: center; margin-bottom: 10px; }
         .title { color: #ff0080; font-size: 32px; font-weight: 900; text-shadow: 0 0 15px rgba(255,0,128,0.4); }
-        
         .panel { background: #1a1532; border-radius: 16px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); }
         .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
         .panel h2 { color: #00f2fe; font-size: 18px; margin: 0; }
-
         .btn-refresh { background: #2a204a; border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
-        
         .controls { display: flex; gap: 10px; justify-content: space-between; align-items: center; }
+        .input-modern { background: #231b42; color: #fff; border: 1px solid #00f2fe; padding: 10px; border-radius: 8px; font-size: 14px; outline: none; }
         .input-questao { background: #231b42; color: #fff; border: 2px solid #ff0080; padding: 10px; border-radius: 8px; font-size: 18px; width: 80px; text-align: center; font-weight: bold; outline: none; }
-        
         button.action-btn { flex: 1; padding: 15px; border-radius: 12px; border: none; font-size: 14px; font-weight: 700; cursor: pointer; color: white; transition: transform 0.1s; }
         button.action-btn:active { transform: scale(0.97); }
-        
         .btn-wait { background: #f39c12; }
         .btn-start { background: #00f2fe; color: #000; }
         .btn-stop { background: #ff4b4b; }
-
+        .btn-divino { padding: 10px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; flex: 1; }
         .data-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
-        
         .player-list { display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto; }
         .player-item { display: flex; align-items: center; justify-content: space-between; background: #231b42; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .player-info { display: flex; align-items: center; gap: 10px; }
         .player-info img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid #00f2fe; }
         .player-pts { font-weight: 900; color: #f7971e; }
-        
         table { width: 100%; border-collapse: collapse; text-align: left; }
         th, td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         th { color: #a0a0c0; font-weight: 600; font-size: 14px; }
         .badge-buff { background: #7928ca; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
         .badge-alt { background: #00f2fe; color: #000; padding: 4px 10px; border-radius: 6px; font-weight: 900; font-size: 14px; }
-        
         #current-status { text-align: center; margin-top: 15px; font-weight: 700; color: #a0a0c0; }
         .empty-msg { text-align: center; color: #666; padding: 20px 0; font-size: 13px; }
-
-        /* Aba de Insights */
         .insights { margin-top: 15px; padding: 15px; background: rgba(0, 242, 254, 0.1); border-left: 4px solid #00f2fe; border-radius: 8px; display: none; }
         .insights h3 { color: #00f2fe; font-size: 16px; margin-bottom: 5px; }
         .insights p { font-size: 14px; margin-bottom: 3px; }
@@ -61,11 +52,8 @@
             <p>Controle do Quiz Party</p>
         </div>
 
-        <!-- CONTROLES DA RODADA -->
         <div class="panel">
-            <div class="panel-header">
-                <h2>1. Controle da Rodada</h2>
-            </div>
+            <div class="panel-header"><h2>1. Controle da Rodada</h2></div>
             <div class="controls">
                 <div style="display: flex; flex-direction: column; align-items: center;">
                     <label style="font-size: 11px; color:#a0a0c0;">Nº Questão</label>
@@ -76,8 +64,6 @@
                 <button class="action-btn btn-stop" onclick="encerrarECalcular()">3. Encerrar & Calcular</button>
             </div>
             <p id="current-status">Status atual: Conectando...</p>
-
-            <!-- Painel de Insights gerado após encerrar -->
             <div id="painel-insights" class="insights">
                 <h3>📊 Insights da Rodada</h3>
                 <p id="insight-texto">Calculando...</p>
@@ -85,35 +71,47 @@
         </div>
 
         <div class="data-grid">
-            <!-- JOGADORES (RANKING AO VIVO) -->
             <div class="panel">
                 <div class="panel-header">
                     <h2>Lobby & Ranking</h2>
                     <button class="btn-refresh" onclick="carregarJogadores()">🔄 Atualizar</button>
                 </div>
-                <div class="player-list" id="players-list">
-                    <div class="empty-msg">Carregando jogadores...</div>
+                <div class="player-list" id="players-list"><div class="empty-msg">Carregando jogadores...</div></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header"><h2>Respostas ao Vivo</h2></div>
+                <table>
+                    <thead><tr><th>Jogador</th><th>Resposta</th><th>Buff</th></tr></thead>
+                    <tbody id="answers-list"><tr><td colspan="3" class="empty-msg">Aguardando início...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- MODO DEUS & GRÁFICOS -->
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div class="panel" style="flex: 1; min-width: 300px;">
+                <h3 style="color: #ff0080; margin-bottom: 10px;">⚡ Controle Divino</h3>
+                <select id="admin-alvo" class="input-modern" style="width: 100%; margin-bottom: 10px;"></select>
+                <input type="number" id="admin-pontos" class="input-modern" placeholder="Pontos (Ex: 50)" style="width: 100%; margin-bottom: 10px;">
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-divino" style="background:#00f2fe; color:#000;" onclick="aplicarPoderDivino('buff')">Dar Pontos 🎁</button>
+                    <button class="btn-divino" style="background:#ff4b4b; color:#fff;" onclick="aplicarPoderDivino('punir')">Punir ☠️</button>
                 </div>
             </div>
 
-            <!-- RESPOSTAS DA RODADA -->
-            <div class="panel">
-                <div class="panel-header">
-                    <h2>Respostas ao Vivo</h2>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Jogador</th>
-                            <th>Resposta</th>
-                            <th>Buff</th>
-                        </tr>
-                    </thead>
-                    <tbody id="answers-list">
-                        <tr><td colspan="3" class="empty-msg">Aguardando início...</td></tr>
-                    </tbody>
-                </table>
+            <div class="panel" style="flex: 1; min-width: 300px;">
+                <h3 style="color: #00f2fe; margin-bottom: 10px;">⚔️ Comparador</h3>
+                <select id="rival-1" class="input-modern" style="width: 100%; margin-bottom: 5px;" onchange="compararRivais()"></select>
+                <div style="text-align: center; font-weight: bold; color: #a0a0c0; margin-bottom: 5px;">VS</div>
+                <select id="rival-2" class="input-modern" style="width: 100%; margin-bottom: 10px;" onchange="compararRivais()"></select>
+                <div id="resultado-comparacao" style="text-align: center; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px;">Selecione 2 jogadores</div>
             </div>
+        </div>
+
+        <div class="panel" style="margin-top: 20px;">
+            <h3>📊 Desempenho dos Jogadores</h3>
+            <canvas id="rankingChart" style="max-height: 250px; width: 100%;"></canvas>
         </div>
     </div>
 
@@ -123,13 +121,11 @@
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let jogadoresMap = {};
-        let perguntaAtualId = null;
+        let meuGrafico = null;
 
-        // Avatar fallback caso não tenha foto
         function getAvatarFallback(nome) {
             const inicial = (nome || '?').charAt(0).toUpperCase();
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100%" height="100%" fill="#7928ca"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-size="50" font-family="sans-serif" font-weight="bold">${inicial}</text></svg>`;
-            return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+            return 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100%" height="100%" fill="#7928ca"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-size="50" font-family="sans-serif" font-weight="bold">${inicial}</text></svg>`);
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -138,14 +134,10 @@
             escutarRespostas();
         });
 
-        // 1. AÇÕES DO HOST
         async function prepararRodada() {
             const questaoNum = document.getElementById('input-questao').value;
-            perguntaAtualId = questaoNum; // Usa o número direto "1", "2" para cruzar com o banco
-            
             document.getElementById('painel-insights').style.display = 'none';
             document.getElementById('answers-list').innerHTML = '<tr><td colspan="3" class="empty-msg">Aguardando respostas...</td></tr>';
-            
             await supabaseClient.from('partida_estado').update({ status: 'aguardando_jogadores', pergunta_atual_id: questaoNum }).eq('id', 1);
             document.getElementById('current-status').innerText = `Status: PREPARANDO QUESTÃO ${questaoNum}`;
         }
@@ -156,78 +148,74 @@
             document.getElementById('current-status').innerText = `Status: VALENDO QUESTÃO ${questaoNum} 🔥`;
         }
 
-        // 2. A MÁGICA: ENCERRAR E CALCULAR
         async function encerrarECalcular() {
             const questaoNum = document.getElementById('input-questao').value;
-            
-            // Trava os celulares
             await supabaseClient.from('partida_estado').update({ status: 'tempo_esgotado' }).eq('id', 1);
             document.getElementById('current-status').innerText = `Status: ENCERRADO! (Calculando...)`;
 
             try {
-                // Puxa o gabarito
                 const { data: gabarito } = await supabaseClient.from('quiz_gabarito').select('resposta_correta').eq('pergunta_id', questaoNum).single();
-                if (!gabarito) {
-                    alert(`Gabarito da questão ${questaoNum} não encontrado no banco! Insira no Supabase.`);
-                    return;
-                }
+                if (!gabarito) return alert(`Gabarito da questão ${questaoNum} não encontrado!`);
                 const correta = gabarito.resposta_correta;
 
-                // Puxa as respostas dessa rodada
                 const { data: respostas } = await supabaseClient.from('respostas_rodada').select('*').eq('pergunta_id', questaoNum);
                 
                 let acertos = 0;
                 let pontosDistribuidos = 0;
+                let eventoEspecial = "";
+                
+                respostas.forEach(r => { if (r.alternativa === correta) acertos++; });
 
-                // Calcula os pontos 
-                for (let r of respostas) {
-                    let pontosGanhos = 0;
-                    
-                    if (r.alternativa === correta) {
-                        acertos++;
-                        pontosGanhos = 100; // Acerto Base: 100 pontos
-                        
-                        // Verifica os buffs pelo nome EXATO que o player envia
-                        if (r.buff_usado === 'dobro') {
-                            pontosGanhos = 200;
+                // LÓGICA DINÂMICA
+                if (respostas.length > 0) {
+                    if (acertos === respostas.length) {
+                        eventoEspecial = "Fácil demais! Todos acertaram, ninguém pontua.";
+                    } else if (acertos === 0) {
+                        // Todos erraram: Piedade pro último colocado
+                        let rankArr = Object.values(jogadoresMap).sort((a,b) => (a.pontos||0) - (b.pontos||0));
+                        if(rankArr.length > 0) {
+                            let ultimo = rankArr[0];
+                            let nv = (ultimo.pontos || 0) + 10;
+                            await supabaseClient.from('jogadores').update({ pontos: nv }).eq('id', ultimo.id);
+                            pontosDistribuidos = 10;
+                            eventoEspecial = `Todos erraram! O sistema deu 10 pts de consolação para ${ultimo.nome}.`;
                         }
                     } else {
-                        // Se errou, ganha 0 (a menos que tenha usado escudo, que podemos programar depois)
-                        pontosGanhos = 0; 
-                    }
-
-                    if (pontosGanhos > 0) {
-                        pontosDistribuidos += pontosGanhos;
-                        let jogadorAtual = jogadoresMap[r.jogador_id];
-                        let novaPontuacao = (jogadorAtual.pontos || 0) + pontosGanhos;
+                        // Calcula pontos base pela escassez (1 acerto = 100, 2 acertos = 90...)
+                        let pontosBase = Math.max(10, 100 - ((acertos - 1) * 10));
                         
-                        // Atualiza no banco
-                        await supabaseClient.from('jogadores').update({ pontos: novaPontuacao }).eq('id', r.jogador_id);
-                        jogadoresMap[r.jogador_id].pontos = novaPontuacao; // Atualiza local
+                        for (let r of respostas) {
+                            let pts = 0;
+                            if (r.alternativa === correta) {
+                                pts = pontosBase;
+                                if (r.buff_usado === 'dobro') pts *= 2;
+                            } else {
+                                // Se errar com o dobro, perde o dobro!
+                                if (r.buff_usado === 'dobro') pts = -(pontosBase * 2);
+                            }
+
+                            if (pts !== 0) {
+                                let jog = jogadoresMap[r.jogador_id];
+                                let novaP = Math.max(0, (jog.pontos || 0) + pts); // Nao deixa negativo
+                                await supabaseClient.from('jogadores').update({ pontos: novaP }).eq('id', r.jogador_id);
+                                if (pts > 0) pontosDistribuidos += pts;
+                            }
+                        }
                     }
                 }
 
-                // Atualiza a tela com os Insights da Rodada!
-                const insightsDiv = document.getElementById('painel-insights');
-                const insightsTexto = document.getElementById('insight-texto');
-                insightsDiv.style.display = 'block';
-                
-                let taxaAcerto = respostas.length > 0 ? Math.round((acertos / respostas.length) * 100) : 0;
-                
-                insightsTexto.innerHTML = `
-                    <strong>Resposta Correta:</strong> Letra ${correta} <br>
-                    <strong>Acertos:</strong> ${acertos} de ${respostas.length} jogadores (${taxaAcerto}%)<br>
-                    <strong>Pontos distribuídos na rodada:</strong> ${pontosDistribuidos} pts
+                document.getElementById('painel-insights').style.display = 'block';
+                document.getElementById('insight-texto').innerHTML = `
+                    <strong>Correta:</strong> Letra ${correta} <br>
+                    <strong>Acertos:</strong> ${acertos} de ${respostas.length}<br>
+                    <strong>Pontos Distribuídos:</strong> ${pontosDistribuidos} pts<br>
+                    <span style="color:#ff0080; font-weight:bold;">${eventoEspecial}</span>
                 `;
-
-                carregarJogadores(); // Recarrega o ranking ordenado
                 
-            } catch (err) {
-                console.error("Erro ao calcular:", err);
-            }
+                await carregarJogadores(); // Recarrega gráficos e lista
+            } catch (err) { console.error(err); }
         }
 
-        // 3. JOGADORES & RANKING
         async function carregarJogadores() {
             const { data } = await supabaseClient.from('jogadores').select('*').order('pontos', { ascending: false });
             if (data) {
@@ -235,57 +223,83 @@
                 const list = document.getElementById('players-list');
                 list.innerHTML = '';
                 
+                let options = '<option value="">Selecione...</option>';
+                let nomes = [], pontos = [];
+
                 data.forEach(j => {
                     jogadoresMap[j.id] = j;
-                    const foto = (j.foto_url && !j.foto_url.includes('placeholder')) ? j.foto_url : getAvatarFallback(j.nome);
+                    nomes.push(j.nome);
+                    pontos.push(j.pontos || 0);
+                    options += `<option value="${j.id}">${j.nome}</option>`;
                     
-                    list.innerHTML += `
-                        <div class="player-item">
-                            <div class="player-info">
-                                <img src="${foto}" onerror="this.src='${getAvatarFallback(j.nome)}'">
-                                <span>${j.nome}</span>
-                            </div>
-                            <span class="player-pts">${j.pontos || 0} pts</span>
-                        </div>
-                    `;
+                    const foto = (j.foto_url && !j.foto_url.includes('placeholder')) ? j.foto_url : getAvatarFallback(j.nome);
+                    list.innerHTML += `<div class="player-item"><div class="player-info"><img src="${foto}"><span>${j.nome}</span></div><span class="player-pts">${j.pontos || 0} pts</span></div>`;
+                });
+
+                document.getElementById('admin-alvo').innerHTML = options;
+                document.getElementById('rival-1').innerHTML = options;
+                document.getElementById('rival-2').innerHTML = options;
+                
+                atualizarGrafico(nomes, pontos);
+            }
+        }
+
+        function atualizarGrafico(nomes, pontos) {
+            const ctx = document.getElementById('rankingChart').getContext('2d');
+            if (meuGrafico) {
+                meuGrafico.data.labels = nomes;
+                meuGrafico.data.datasets[0].data = pontos;
+                meuGrafico.update();
+            } else {
+                meuGrafico = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: nomes, datasets: [{ label: 'Pontos', data: pontos, backgroundColor: '#00f2fe', borderRadius: 5 }] },
+                    options: { scales: { y: { beginAtZero: true, ticks: { color: '#fff'} }, x: { ticks: { color: '#fff'} } }, plugins: { legend: { labels: { color: '#fff' } } } }
                 });
             }
         }
 
-        // 4. RESPOSTAS AO VIVO (CORRIGIDO)
+        async function aplicarPoderDivino(acao) {
+            const id = document.getElementById('admin-alvo').value;
+            const pts = parseInt(document.getElementById('admin-pontos').value);
+            if (!id || !pts) return alert("Preencha corretamente!");
+            
+            let nj = jogadoresMap[id];
+            let nv = acao === 'buff' ? (nj.pontos || 0) + pts : Math.max(0, (nj.pontos || 0) - pts);
+            
+            await supabaseClient.from('jogadores').update({ pontos: nv }).eq('id', id);
+            alert(`${nj.nome} ${acao === 'buff' ? 'ganhou' : 'perdeu'} ${pts} pontos!`);
+            carregarJogadores();
+        }
+
+        function compararRivais() {
+            const r1 = document.getElementById('rival-1').value;
+            const r2 = document.getElementById('rival-2').value;
+            if(!r1 || !r2 || r1 === r2) return;
+            
+            const j1 = jogadoresMap[r1], j2 = jogadoresMap[r2];
+            const diff = Math.abs(j1.pontos - j2.pontos);
+            const lider = j1.pontos > j2.pontos ? j1.nome : (j2.pontos > j1.pontos ? j2.nome : "Empate");
+            
+            document.getElementById('resultado-comparacao').innerHTML = `Diferença: <span style="color:#00f2fe; font-size:20px;">${diff} pts</span><br>Líder: ${lider}`;
+        }
+
         function escutarRespostas() {
             supabaseClient.channel('admin_respostas')
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'respostas_rodada' }, payload => {
-                    
-                    const questaoAtual = document.getElementById('input-questao').value;
-                    
-                    // Compara transformando ambos em Texto para evitar bug de Número vs Texto
-                    if (String(payload.new.pergunta_id) === String(questaoAtual)) {
-                        
-                        const tbody = document.getElementById('answers-list');
-                        if (tbody.querySelector('.empty-msg')) tbody.innerHTML = '';
-                        
-                        const jogador = jogadoresMap[payload.new.jogador_id];
-                        const nome = jogador ? jogador.nome : "Desconhecido";
-                        const buffHtml = payload.new.buff_usado ? `<span class="badge-buff">${payload.new.buff_usado}</span>` : '-';
-                        
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>${nome}</td>
-                                <td><span class="badge-alt">${payload.new.alternativa}</span></td>
-                                <td>${buffHtml}</td>
-                            </tr>
-                        `;
+                    if (String(payload.new.pergunta_id) === String(document.getElementById('input-questao').value)) {
+                        const t = document.getElementById('answers-list');
+                        if (t.querySelector('.empty-msg')) t.innerHTML = '';
+                        const nome = jogadoresMap[payload.new.jogador_id]?.nome || "Desc.";
+                        const buff = payload.new.buff_usado ? `<span class="badge-buff">${payload.new.buff_usado}</span>` : '-';
+                        t.innerHTML += `<tr><td>${nome}</td><td><span class="badge-alt">${payload.new.alternativa}</span></td><td>${buff}</td></tr>`;
                     }
                 }).subscribe();
         }
 
         async function buscarEstadoAtual() {
             const { data } = await supabaseClient.from('partida_estado').select('*').eq('id', 1).single();
-            if (data) {
-                document.getElementById('input-questao').value = data.pergunta_atual_id || 1;
-                document.getElementById('current-status').innerText = `Status atual: ${data.status.toUpperCase()}`;
-            }
+            if(data) document.getElementById('input-questao').value = data.pergunta_atual_id || 1;
         }
     </script>
 </body>
