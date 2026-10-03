@@ -37,6 +37,11 @@
         .player-name { font-weight: 700; font-size: 14px; }
         .player-buffs { font-size: 11px; color: #00f2fe; font-weight: 600; }
         .player-pts { font-weight: 900; color: #f7971e; }
+        .player-right { display: flex; align-items: center; gap: 10px; }
+        .btn-del { background: transparent; border: 1px solid rgba(255,75,75,0.5); color: #ff4b4b; border-radius: 6px; padding: 4px 7px; cursor: pointer; font-size: 13px; }
+        .btn-del:hover { background: #ff4b4b; color: #fff; }
+        .dot { width: 9px; height: 9px; border-radius: 50%; background: #555; display: inline-block; margin-right: 6px; }
+        .dot.on { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
         th, td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         th { color: #a0a0c0; font-weight: 600; font-size: 14px; }
@@ -85,11 +90,12 @@
                         <button class="btn-refresh" onclick="carregarJogadores()">🔄 Atualizar</button>
                     </div>
                 </div>
+                <div id="online-count" style="font-size:12px; color:#a0a0c0; margin-bottom:8px;">🟢 0 online</div>
                 <div class="player-list" id="players-list"><div class="empty-msg">Carregando jogadores...</div></div>
             </div>
 
             <div class="panel">
-                <div class="panel-header"><h2>Respostas ao Vivo</h2></div>
+                <div class="panel-header"><h2 id="titulo-respostas">Respostas ao Vivo</h2></div>
                 <table>
                     <thead><tr><th>Jogador</th><th>Resposta</th><th>Buff</th></tr></thead>
                     <tbody id="answers-list"><tr><td colspan="3" class="empty-msg">Aguardando início...</td></tr></tbody>
@@ -108,6 +114,7 @@
                     <button class="btn-divino" style="background:#7928ca; color:#fff;" onclick="aplicarPoderDivino('energia')">+1 Buff ⚡</button>
                     <button class="btn-divino" style="background:#ff0080; color:#fff;" onclick="aplicarPoderDivino('combo')">Pontos + Buff 🎁⚡</button>
                     <button class="btn-divino" style="background:#ff4b4b; color:#fff;" onclick="aplicarPoderDivino('punir')">Punir ☠️</button>
+                    <button class="btn-divino" style="background:#ffb300; color:#000; flex-basis:100%;" onclick="energiaParaTodos()">⚡ +1 Buff para TODOS</button>
                 </div>
             </div>
 
@@ -134,6 +141,10 @@
         let jogadoresMap = {};
         const ENERGIA_INICIAL = 3; // ⚡ de cada jogador ao resetar (mesmo valor do index.html)
         let meuGrafico = null;
+        let calculando = false;
+        let ultimaCalculada = null;
+        let onlineIds = new Set();
+        const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
         function getAvatarFallback(nome) {
             const inicial = (nome || '?').charAt(0).toUpperCase();
@@ -143,11 +154,15 @@
         window.addEventListener('DOMContentLoaded', async () => {
             await carregarJogadores();
             await buscarEstadoAtual();
+            await carregarRespostasAtuais();
             escutarRespostas();
+            escutarEstado();
+            escutarPresenca();
         });
 
         async function prepararRodada() {
             const questaoNum = document.getElementById('input-questao').value;
+            ultimaCalculada = null;
             document.getElementById('painel-insights').style.display = 'none';
             document.getElementById('answers-list').innerHTML = '<tr><td colspan="3" class="empty-msg">Aguardando respostas...</td></tr>';
             await supabaseClient.from('partida_estado').update({ status: 'aguardando_jogadores', pergunta_atual_id: questaoNum }).eq('id', 1);
@@ -160,7 +175,20 @@
             document.getElementById('current-status').innerText = `Status: VALENDO QUESTÃO ${questaoNum} 🔥`;
         }
 
+        // Evita somar os pontos duas vezes (clique duplo ou recalcular a mesma questão)
         async function encerrarECalcular() {
+            const q = String(document.getElementById('input-questao').value);
+            if (calculando) return;
+            if (ultimaCalculada === q && !confirm(`A questão ${q} JÁ foi calculada.\nCalcular de novo vai SOMAR os pontos outra vez. Continuar?`)) return;
+            calculando = true;
+            try {
+                if ((await calcularRodada()) === true) ultimaCalculada = q;
+            } finally {
+                calculando = false;
+            }
+        }
+
+        async function calcularRodada() {
             const questaoNum = document.getElementById('input-questao').value;
             await supabaseClient.from('partida_estado').update({ status: 'tempo_esgotado' }).eq('id', 1);
             document.getElementById('current-status').innerText = `Status: ENCERRADO! (Calculando...)`;
@@ -175,7 +203,7 @@
                 let eventoEspecial = "";
 
                 // RESOLVER COPIAR (MARIA): segue correntes (Maria copiando Maria) e ignora ciclos
-                const nomeDe = id => (jogadoresMap[id] && jogadoresMap[id].nome) || '???';
+                const nomeDe = id => esc((jogadoresMap[id] && jogadoresMap[id].nome) || '???');
                 const porJogador = {};
                 respostas.forEach(r => { porJogador[r.jogador_id] = r; });
                 const resolverCopia = (r) => {
@@ -212,7 +240,7 @@
                             let nv = parseInt(ultimo.pontos || 0) + 10;
                             await supabaseClient.from('jogadores').update({ pontos: nv }).eq('id', ultimo.id);
                             pontosDistribuidos = 10;
-                            eventoEspecial += `<br>😭 Todos erraram! 10 pts de consolação para ${ultimo.nome}.`;
+                            eventoEspecial += `<br>😭 Todos erraram! 10 pts de consolação para ${esc(ultimo.nome)}.`;
                         }
                     } else {
                         const pontosBase = Math.max(10, 100 - ((acertos - 1) * 10));
@@ -275,7 +303,11 @@
                 `;
                 
                 await carregarJogadores();
-            } catch (err) { console.error(err); }
+                return true;
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao calcular a rodada: " + (err.message || err) + "\nVeja o console (F12). Os pontos podem NÃO ter sido aplicados.");
+            }
         }
 
         async function encerrarSecaoBonus() {
@@ -293,7 +325,7 @@
             document.getElementById('painel-insights').style.display = 'block';
             document.getElementById('insight-texto').innerHTML = `
                 <strong style="color:#ff0080; font-size:16px;">🏁 SEÇÃO ENCERRADA!</strong><br>
-                ⚡ <b>${ultimo.nome}</b> (último colocado com ${ultimo.pontos || 0} pts) recebeu <b>+1 Buff/Energia</b> de bônus!
+                ⚡ <b>${esc(ultimo.nome)}</b> (último colocado com ${ultimo.pontos || 0} pts) recebeu <b>+1 Buff/Energia</b> de bônus!
             `;
             await carregarJogadores();
         }
@@ -312,19 +344,22 @@
                     jogadoresMap[j.id] = j;
                     nomes.push(j.nome);
                     pontos.push(parseInt(j.pontos) || 0);
-                    options += `<option value="${j.id}">${j.nome} (${parseInt(j.pontos) || 0} pts | ⚡${parseInt(j.energia) || 0})</option>`;
+                    options += `<option value="${j.id}">${esc(j.nome)} (${parseInt(j.pontos) || 0} pts | ⚡${parseInt(j.energia) || 0})</option>`;
                     
                     const foto = (j.foto_url && !j.foto_url.includes('placeholder')) ? j.foto_url : getAvatarFallback(j.nome);
                     list.innerHTML += `
-                        <div class="player-item">
+                        <div class="player-item" data-id="${esc(j.id)}">
                             <div class="player-info">
-                                <img src="${foto}">
+                                <img src="${esc(foto)}">
                                 <div class="player-details">
-                                    <span class="player-name">${j.nome}</span>
+                                    <span class="player-name"><span class="dot"></span>${esc(j.nome)}</span>
                                     <span class="player-buffs">⚡ ${parseInt(j.energia) || 0} Buffs Disponíveis</span>
                                 </div>
                             </div>
-                            <span class="player-pts">${parseInt(j.pontos) || 0} pts</span>
+                            <div class="player-right">
+                                <span class="player-pts">${parseInt(j.pontos) || 0} pts</span>
+                                <button class="btn-del" title="Excluir jogador" onclick="excluirJogador('${esc(j.id)}')">🗑️</button>
+                            </div>
                         </div>
                     `;
                 });
@@ -334,6 +369,10 @@
                 document.getElementById('rival-2').innerHTML = options;
                 
                 atualizarGrafico(nomes, pontos);
+                pintarOnline();
+                atualizarContagem();
+            } else {
+                document.getElementById('players-list').innerHTML = '<div class="empty-msg">⚠️ Não consegui conectar ao Supabase. O projeto pode estar pausado.</div>';
             }
         }
 
@@ -430,6 +469,99 @@
             }
         }
 
+        async function excluirJogador(id) {
+            const j = jogadoresMap[id];
+            if (!j) return;
+            if (!confirm(`🗑️ Excluir "${j.nome}"?\n\nPontos, energia e respostas dele serão apagados. Não dá para desfazer.`)) return;
+            try {
+                await supabaseClient.from('respostas_rodada').delete().eq('jogador_id', j.id);
+                await supabaseClient.from('respostas_rodada').update({ alvo_id: null }).eq('alvo_id', j.id);
+                const { data, error } = await supabaseClient.from('jogadores').delete().eq('id', j.id).select();
+                if (error) throw error;
+                if (!data || data.length === 0) throw new Error('nenhuma linha apagada');
+                await carregarJogadores();
+            } catch (err) {
+                console.error(err);
+                alert(`Não consegui excluir "${j.nome}".\nO Supabase provavelmente bloqueou o DELETE (falta a permissão/policy de DELETE nas tabelas jogadores e respostas_rodada).\n\nDetalhe: ${err.message || err}`);
+            }
+        }
+
+        async function energiaParaTodos() {
+            const lista = Object.values(jogadoresMap);
+            if (lista.length === 0) return alert("Nenhum jogador encontrado!");
+            if (!confirm(`Dar +1 ⚡ para os ${lista.length} jogadores?`)) return;
+            await Promise.all(lista.map(async j => {
+                const { data } = await supabaseClient.from('jogadores').select('energia').eq('id', j.id).single();
+                const nova = (parseInt(data ? data.energia : j.energia) || 0) + 1;
+                return supabaseClient.from('jogadores').update({ energia: nova }).eq('id', j.id);
+            }));
+            alert(`⚡ +1 Buff entregue para ${lista.length} jogadores!`);
+            await carregarJogadores();
+        }
+
+        // ---- Online (Presence) ----
+        function pintarOnline() {
+            let n = 0;
+            document.querySelectorAll('#players-list .player-item[data-id]').forEach(el => {
+                const on = onlineIds.has(String(el.dataset.id));
+                if (on) n++;
+                const dot = el.querySelector('.dot');
+                if (dot) dot.classList.toggle('on', on);
+            });
+            document.getElementById('online-count').innerText = `🟢 ${n} online`;
+        }
+
+        function escutarPresenca() {
+            const canal = supabaseClient.channel('quiz_presence');
+            canal.on('presence', { event: 'sync' }, () => {
+                onlineIds = new Set();
+                Object.values(canal.presenceState()).forEach(arr => arr.forEach(p => { if (p.jogador_id != null) onlineIds.add(String(p.jogador_id)); }));
+                pintarOnline();
+            }).subscribe();
+        }
+
+        // ---- Status da partida ao vivo ----
+        function mostrarStatus(estado) {
+            if (!estado) return;
+            const q = estado.pergunta_atual_id == null ? '-' : estado.pergunta_atual_id;
+            const textos = {
+                aguardando_jogadores: `Status: PREPARANDO QUESTÃO ${q}`,
+                aceitando_respostas: `Status: VALENDO QUESTÃO ${q} 🔥`,
+                tempo_esgotado: `Status: ENCERRADO (questão ${q})`
+            };
+            document.getElementById('current-status').innerText = textos[estado.status] || `Status: ${estado.status}`;
+        }
+
+        function escutarEstado() {
+            supabaseClient.channel('admin_estado')
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'partida_estado' }, p => mostrarStatus(p.new))
+                .subscribe();
+        }
+
+        // ---- Respostas ao vivo ----
+        function atualizarContagem() {
+            const n = document.querySelectorAll('#answers-list tr[data-jid]').length;
+            const total = Object.keys(jogadoresMap).length;
+            document.getElementById('titulo-respostas').innerText = n ? `Respostas ao Vivo (${n}/${total})` : 'Respostas ao Vivo';
+        }
+
+        function renderResposta(r) {
+            const t = document.getElementById('answers-list');
+            if (t.querySelector('.empty-msg')) t.innerHTML = '';
+            if ([...t.querySelectorAll('tr[data-jid]')].some(tr => tr.dataset.jid === String(r.jogador_id))) return;
+            const nome = esc((jogadoresMap[r.jogador_id] && jogadoresMap[r.jogador_id].nome) || 'Desc.');
+            const alvo = (r.alvo_id && jogadoresMap[r.alvo_id]) ? ` → ${esc(jogadoresMap[r.alvo_id].nome)}` : '';
+            const buff = r.buff_usado ? `<span class="badge-buff">${esc(r.buff_usado)}${alvo}</span>` : '-';
+            t.insertAdjacentHTML('beforeend', `<tr data-jid="${esc(r.jogador_id)}"><td>${nome}</td><td><span class="badge-alt">${esc(r.alternativa)}</span></td><td>${buff}</td></tr>`);
+            atualizarContagem();
+        }
+
+        async function carregarRespostasAtuais() {
+            const q = document.getElementById('input-questao').value;
+            const { data } = await supabaseClient.from('respostas_rodada').select('*').eq('pergunta_id', q);
+            if (data && data.length) data.forEach(renderResposta);
+        }
+
         function compararRivais() {
             const r1 = document.getElementById('rival-1').value;
             const r2 = document.getElementById('rival-2').value;
@@ -447,19 +579,18 @@
         function escutarRespostas() {
             supabaseClient.channel('admin_respostas')
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'respostas_rodada' }, payload => {
-                    if (String(payload.new.pergunta_id) === String(document.getElementById('input-questao').value)) {
-                        const t = document.getElementById('answers-list');
-                        if (t.querySelector('.empty-msg')) t.innerHTML = '';
-                        const nome = jogadoresMap[payload.new.jogador_id]?.nome || "Desc.";
-                        const buff = payload.new.buff_usado ? `<span class="badge-buff">${payload.new.buff_usado}</span>` : '-';
-                        t.innerHTML += `<tr><td>${nome}</td><td><span class="badge-alt">${payload.new.alternativa}</span></td><td>${buff}</td></tr>`;
-                    }
+                    if (String(payload.new.pergunta_id) === String(document.getElementById('input-questao').value)) renderResposta(payload.new);
                 }).subscribe();
         }
 
         async function buscarEstadoAtual() {
-            const { data } = await supabaseClient.from('partida_estado').select('*').eq('id', 1).single();
-            if(data) document.getElementById('input-questao').value = data.pergunta_atual_id || 1;
+            const { data, error } = await supabaseClient.from('partida_estado').select('*').eq('id', 1).single();
+            if (data) {
+                document.getElementById('input-questao').value = data.pergunta_atual_id || 1;
+                mostrarStatus(data);
+            } else if (error) {
+                document.getElementById('current-status').innerText = '⚠️ Sem conexão com o Supabase (o projeto pode estar pausado)';
+            }
         }
     </script>
 </body>
