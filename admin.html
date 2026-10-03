@@ -132,6 +132,7 @@
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let jogadoresMap = {};
+        const ENERGIA_INICIAL = 3; // ⚡ de cada jogador ao resetar (mesmo valor do index.html)
         let meuGrafico = null;
 
         function getAvatarFallback(nome) {
@@ -165,6 +166,7 @@
             document.getElementById('current-status').innerText = `Status: ENCERRADO! (Calculando...)`;
 
             try {
+                await carregarJogadores();
                 const { data: gabarito } = await supabaseClient.from('quiz_gabarito').select('resposta_correta').eq('pergunta_id', questaoNum).single();
                 if (!gabarito) return alert(`Gabarito da questão ${questaoNum} não encontrado!`);
                 const correta = gabarito.resposta_correta;
@@ -172,16 +174,29 @@
                 const { data: respostas } = await supabaseClient.from('respostas_rodada').select('*').eq('pergunta_id', questaoNum);
                 let eventoEspecial = "";
 
-                // RESOLVER COPIAR (MARIA)
-                for (let r of respostas) {
-                    if (r.buff_usado === 'maria' && r.alvo_id) {
-                        const respostaAlvo = respostas.find(res => res.jogador_id === r.alvo_id);
-                        if (respostaAlvo) {
-                            r.alternativa = respostaAlvo.alternativa;
-                            eventoEspecial += `<br>👯 <b>${jogadoresMap[r.jogador_id]?.nome}</b> copiou a resposta de <b>${jogadoresMap[r.alvo_id]?.nome}</b>!`;
-                        }
+                // RESOLVER COPIAR (MARIA): segue correntes (Maria copiando Maria) e ignora ciclos
+                const nomeDe = id => (jogadoresMap[id] && jogadoresMap[id].nome) || '???';
+                const porJogador = {};
+                respostas.forEach(r => { porJogador[r.jogador_id] = r; });
+                const resolverCopia = (r) => {
+                    const visto = new Set([r.jogador_id]);
+                    let atual = r;
+                    while (atual.buff_usado === 'maria' && atual.alvo_id) {
+                        const alvo = porJogador[atual.alvo_id];
+                        if (!alvo) break;                                   // alvo não respondeu
+                        if (visto.has(alvo.jogador_id)) return r.alternativa; // ciclo: cada um fica com a sua
+                        visto.add(alvo.jogador_id);
+                        atual = alvo;
                     }
-                }
+                    return atual.alternativa;
+                };
+                const copias = respostas.map(r => [r, resolverCopia(r)]);
+                copias.forEach(([r, alt]) => {
+                    if (r.buff_usado === 'maria' && r.alvo_id && porJogador[r.alvo_id]) {
+                        eventoEspecial += `<br>👯 <b>${nomeDe(r.jogador_id)}</b> copiou a resposta de <b>${nomeDe(r.alvo_id)}</b>!`;
+                    }
+                    r.alternativa = alt;
+                });
 
                 let acertos = 0;
                 respostas.forEach(r => { if (r.alternativa === correta) acertos++; });
@@ -200,50 +215,53 @@
                             eventoEspecial += `<br>😭 Todos erraram! 10 pts de consolação para ${ultimo.nome}.`;
                         }
                     } else {
-                        // Pontuação normal de escassez
-                        let pontosBase = Math.max(10, 100 - ((acertos - 1) * 10));
-                        let ganhosDaRodada = {}; 
-                        Object.keys(jogadoresMap).forEach(id => ganhosDaRodada[id] = 0);
+                        const pontosBase = Math.max(10, 100 - ((acertos - 1) * 10));
+                        const antes = {}, ganhos = {};
+                        Object.keys(jogadoresMap).forEach(id => { antes[id] = parseInt(jogadoresMap[id].pontos) || 0; ganhos[id] = 0; });
+                        const blindado = id => !!(porJogador[id] && porJogador[id].buff_usado === 'escudo');
+                        const ataqueValido = r => r.alternativa === correta && r.alvo_id && (r.alvo_id in ganhos) && (r.jogador_id in ganhos);
 
+                        // 1) pontos normais (+ Dobro ou Nada)
                         for (let r of respostas) {
-                            let pts = 0;
-                            if (r.alternativa === correta) {
-                                pts = pontosBase;
-                                if (r.buff_usado === 'dobro') pts *= 2;
-                            } else {
-                                if (r.buff_usado === 'dobro') pts = -(pontosBase * 2);
-                                if (r.buff_usado === 'escudo') pts = 0;
-                            }
-                            ganhosDaRodada[r.jogador_id] += pts;
+                            if (!(r.jogador_id in ganhos)) continue;
+                            if (r.alternativa === correta) ganhos[r.jogador_id] += pontosBase * (r.buff_usado === 'dobro' ? 2 : 1);
+                            else if (r.buff_usado === 'dobro') ganhos[r.jogador_id] -= pontosBase * 2;
                         }
 
+                        // 2) Vampiro (suga no máximo o que o alvo tem; Escudo bloqueia)
                         for (let r of respostas) {
-                            if (r.buff_usado === 'vampiro' && r.alternativa === correta && r.alvo_id) {
-                                const alvoId = r.alvo_id;
-                                const respostaAlvo = respostas.find(res => res.jogador_id === alvoId);
-                                const alvoUsouEscudo = respostaAlvo && respostaAlvo.buff_usado === 'escudo';
-                                
-                                const nomeAtacante = jogadoresMap[r.jogador_id]?.nome;
-                                const nomeAlvo = jogadoresMap[alvoId]?.nome;
-
-                                if (alvoUsouEscudo) {
-                                    eventoEspecial += `<br>🛡️ <b>${nomeAlvo}</b> bloqueou o Vampiro de <b>${nomeAtacante}</b>!`;
-                                } else {
-                                    ganhosDaRodada[r.jogador_id] += 50;
-                                    ganhosDaRodada[alvoId] -= 50;
-                                    eventoEspecial += `<br>🧛‍♂️ <b>${nomeAtacante}</b> sugou 50 pts de <b>${nomeAlvo}</b>!`;
-                                }
+                            if (r.buff_usado !== 'vampiro' || !ataqueValido(r)) continue;
+                            if (blindado(r.alvo_id)) {
+                                eventoEspecial += `<br>🛡️ <b>${nomeDe(r.alvo_id)}</b> bloqueou o Vampiro de <b>${nomeDe(r.jogador_id)}</b>!`;
+                                continue;
                             }
+                            const roubo = Math.min(50, Math.max(0, antes[r.alvo_id] + ganhos[r.alvo_id]));
+                            ganhos[r.jogador_id] += roubo;
+                            ganhos[r.alvo_id] -= roubo;
+                            eventoEspecial += `<br>🧛‍♂️ <b>${nomeDe(r.jogador_id)}</b> sugou ${roubo} pts de <b>${nomeDe(r.alvo_id)}</b>!`;
                         }
 
-                        for (let id of Object.keys(ganhosDaRodada)) {
-                            let pts = ganhosDaRodada[id];
-                            if (pts !== 0) {
-                                let jog = jogadoresMap[id];
-                                let novaP = Math.max(0, parseInt(jog.pontos || 0) + pts); 
-                                await supabaseClient.from('jogadores').update({ pontos: novaP }).eq('id', jog.id);
-                                if (pts > 0) pontosDistribuidos += pts;
+                        // 3) totais depois de pontos + vampiros (nunca abaixo de 0)
+                        const novo = {};
+                        Object.keys(ganhos).forEach(id => { novo[id] = Math.max(0, antes[id] + ganhos[id]); });
+
+                        // 4) Troca-Troca (Escudo bloqueia)
+                        for (let r of respostas) {
+                            if (r.buff_usado !== 'troca' || !ataqueValido(r)) continue;
+                            if (blindado(r.alvo_id)) {
+                                eventoEspecial += `<br>🛡️ <b>${nomeDe(r.alvo_id)}</b> bloqueou o Troca-Troca de <b>${nomeDe(r.jogador_id)}</b>!`;
+                                continue;
                             }
+                            const a = r.jogador_id, b = r.alvo_id;
+                            [novo[a], novo[b]] = [novo[b], novo[a]];
+                            eventoEspecial += `<br>🔄 <b>${nomeDe(a)}</b> trocou de pontuação com <b>${nomeDe(b)}</b>! (${novo[b]} ⇄ ${novo[a]})`;
+                        }
+
+                        // 5) salvar
+                        for (let id of Object.keys(novo)) {
+                            if (novo[id] === antes[id]) continue;
+                            await supabaseClient.from('jogadores').update({ pontos: novo[id] }).eq('id', jogadoresMap[id].id);
+                            if (novo[id] > antes[id]) pontosDistribuidos += novo[id] - antes[id];
                         }
                     }
                 }
@@ -267,7 +285,8 @@
             if (rankArr.length === 0) return alert("Nenhum jogador encontrado!");
 
             let ultimo = rankArr[0];
-            let novaEnergia = parseInt(ultimo.energia || 0) + 1;
+            const { data: fresco } = await supabaseClient.from('jogadores').select('energia').eq('id', ultimo.id).single();
+            let novaEnergia = (parseInt(fresco ? fresco.energia : ultimo.energia) || 0) + 1;
 
             await supabaseClient.from('jogadores').update({ energia: novaEnergia }).eq('id', ultimo.id);
 
@@ -344,7 +363,8 @@
                     return;
                 }
 
-                let nj = jogadoresMap[idSelecionado];
+                const { data: fresco } = await supabaseClient.from('jogadores').select('*').eq('id', idSelecionado).single();
+                let nj = fresco || jogadoresMap[idSelecionado];
                 let nvPontos = parseInt(nj.pontos) || 0;
                 let nvEnergia = parseInt(nj.energia) || 0;
                 let confirmMsg = "";
@@ -396,13 +416,13 @@
             try {
                 // Cria uma promessa de atualização simultânea para CADA jogador usando o ID original numérico
                 const promessas = Object.values(jogadoresMap).map(jogador => {
-                    return supabaseClient.from('jogadores').update({ pontos: 0, energia: 0 }).eq('id', jogador.id);
+                    return supabaseClient.from('jogadores').update({ pontos: 0, energia: ENERGIA_INICIAL }).eq('id', jogador.id);
                 });
                 
                 // Dispara todas as atualizações de uma vez
                 await Promise.all(promessas);
                 
-                alert("♻️ Jogo resetado com sucesso! Todos os jogadores voltaram à estaca zero.");
+                alert("♻️ Jogo resetado! Pontos zerados e energia de volta para ⚡" + ENERGIA_INICIAL + ".");
                 await carregarJogadores();
             } catch (err) {
                 console.error("Erro ao resetar banco de dados:", err);
