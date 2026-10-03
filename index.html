@@ -113,6 +113,11 @@
         .buff-card.selected { border-color: #00f2fe; background: rgba(0,242,254,0.15); box-shadow: 0 0 10px rgba(0,242,254,0.3); }
         .buff-card.used { opacity: 0.3; cursor: not-allowed; border-color: #444; filter: grayscale(100%); }
         .buff-icon { font-size: 18px; }
+        .buffs-grid .buff-card:last-child:nth-child(3n+1) { grid-column: 1 / -1; }
+        .buff-card.sem-energia { opacity: 0.4; }
+        #toast-container { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 8px; width: min(92vw, 380px); pointer-events: none; }
+        .toast { background: #221a3f; border: 1px solid #7928ca; color: #fff; padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.4); animation: toastIn 0.25s ease; }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 
         .answers-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
         
@@ -212,7 +217,7 @@
             <div class="buffs-section">
                 <div class="buffs-title">
                     <span>SEUS BUFFS</span>
-                    <span id="buff-active-label" style="color:#00f2fe; font-weight:700;">6/6 disponíveis</span>
+                    <span id="buff-active-label" style="color:#00f2fe; font-weight:700;">⚡ 0</span>
                 </div>
                 <div class="buffs-grid">
                     <div class="buff-card" id="buff-dobro" onclick="abrirModalBuff('dobro')">
@@ -233,6 +238,9 @@
                     <div class="buff-card" id="buff-5050" onclick="abrirModalBuff('5050')">
                         <span class="buff-icon">✂️</span><span>50 / 50</span>
                     </div>
+                    <div class="buff-card" id="buff-troca" onclick="abrirModalBuff('troca')">
+                        <span class="buff-icon">🔄</span><span>Troca-Troca</span>
+                    </div>
                 </div>
             </div>
 
@@ -241,7 +249,6 @@
                 <button class="btn-answer btn-b" onclick="selecionarResposta('B')"><span>B</span> <span>&gt;</span></button>
                 <button class="btn-answer btn-c" onclick="selecionarResposta('C')"><span>C</span> <span>&gt;</span></button>
                 <button class="btn-answer btn-d" onclick="selecionarResposta('D')"><span>D</span> <span>&gt;</span></button>
-                <button class="btn-answer btn-e" onclick="selecionarResposta('E')"><span>E</span> <span>&gt;</span></button>
             </div>
             
             <button id="btn-confirmar-resposta" class="btn-primary" onclick="enviarRespostaFinal()">CONFIRMAR RESPOSTA</button>
@@ -277,6 +284,8 @@
         <div class="drawer-content" id="lista-jogadores-online"></div>
     </div>
 
+    <div id="toast-container"></div>
+
     <script>
         const SUPABASE_URL = "https://azqtgvonviekeivefqde.supabase.co";
         const SUPABASE_KEY = "sb_publishable_U-C_YPVKJL48zEPdaQQGeg_nrE_F3Jm";
@@ -295,16 +304,35 @@
         let respostaEnviada = false;
         let fileFoto = null;
         let canalRealtime = null;
-        let buffsUsados = new Set();
-        const TOTAL_BUFFS = 6;
+        let canalBuffs = null;
+        let canalEnergia = null;
+        let pollEnergia = null;
+        let versaoEnergia = 0;
+        let buffDaRodada = null;   // qualquer buff já usado/selecionado nesta rodada (inclui 50/50)
+
+        // ===== REGRAS DE ENERGIA =====
+        const CUSTO_BUFF = 1;        // ⚡ gasta por buff usado
+        const ENERGIA_INICIAL = 3;   // ⚡ que um jogador NOVO recebe ao entrar
+        const LETRAS = ['A', 'B', 'C', 'D'];
 
         const DICIONARIO_BUFFS = {
             'dobro': { icon: '⚡', nome: 'Dobro ou Nada', desc: 'Se você acertar ganha o DOBRO de pontos! Se errar, perde o dobro.', precisaAlvo: false },
-            'escudo': { icon: '🛡️', nome: 'Escudo Protetor', desc: 'Se você errar a questão ou for atacado por um vampiro, não perde nenhum ponto.', precisaAlvo: false },
+            'escudo': { icon: '🛡️', nome: 'Escudo Protetor', desc: 'Blindagem total: nesta rodada você fica imune a qualquer ataque de outros jogadores (Vampiro, Troca-Troca).', precisaAlvo: false },
             'vampiro': { icon: '🧛', nome: 'Ataque Vampiro', desc: 'Se você acertar a resposta, vai sugar pontos do jogador que você escolher.', precisaAlvo: true },
             'maria': { icon: '👯', nome: 'Maria Vai Com As Outras', desc: 'Não sabe a resposta? Copie automaticamente a opção que o alvo escolhido marcar.', precisaAlvo: true },
             'chute': { icon: '🎲', nome: 'Chute Cego', desc: 'O sistema escolherá uma resposta totalmente aleatória para você e enviará imediatamente.', precisaAlvo: false },
-            '5050': { icon: '✂️', nome: '50 / 50', desc: 'O sistema removerá duas opções erradas da tela para facilitar sua escolha.', precisaAlvo: false }
+            '5050': { icon: '✂️', nome: '50 / 50', desc: 'O sistema removerá duas opções erradas da tela. Sobram só a certa e uma errada: 50% de chance!', precisaAlvo: false },
+            'troca': { icon: '🔄', nome: 'Troca-Troca', desc: 'Se você acertar, troca de pontuação total com o jogador escolhido. Quem está na frente que se cuide! O Escudo do alvo bloqueia.', precisaAlvo: true }
+        };
+
+        const TEXTO_NOTIFICACAO = {
+            dobro: '⚡ Alguém apostou no Dobro ou Nada!',
+            escudo: '🛡️ Alguém se blindou com o Escudo!',
+            vampiro: '🧛 Cuidado! Alguém ativou o Vampiro!',
+            maria: '👯 Alguém ativou o Maria Vai Com As Outras!',
+            chute: '🎲 Alguém apostou tudo no Chute Cego!',
+            '5050': '✂️ Alguém usou o 50/50!',
+            troca: '🔄 Alguém ativou o Troca-Troca!'
         };
 
         function getAvatarFallback(nome) {
@@ -378,7 +406,7 @@
                     const { data: updated } = await supabaseClient.from('jogadores').update({ foto_url: fotoUrl }).eq('id', existente.id).select().single();
                     playerFinal = updated;
                 } else {
-                    const { data: newPlayer } = await supabaseClient.from('jogadores').insert([{ nome: nomeInput, foto_url: fotoUrl }]).select().single();
+                    const { data: newPlayer } = await supabaseClient.from('jogadores').insert([{ nome: nomeInput, foto_url: fotoUrl, energia: ENERGIA_INICIAL, pontos: 0 }]).select().single();
                     playerFinal = newPlayer;
                 }
 
@@ -395,6 +423,7 @@
         function sairDoPerfil() {
             if (canalRealtime) { supabaseClient.removeChannel(canalRealtime); canalRealtime = null; }
             localStorage.removeItem('quiz_party_jogador');
+            pararMonitores();
             jogadorAtual = null;
             document.getElementById('screen-game').style.display = 'none';
             document.getElementById('screen-login').style.display = 'flex';
@@ -414,6 +443,8 @@
 
             atualizarContadorBuffs();
             escutarEstadoPartida();
+            escutarBuffsGlobais();
+            iniciarMonitorEnergia();
         }
 
         function escutarEstadoPartida() {
@@ -432,6 +463,7 @@
             if (!estado) return;
             statusPartida = estado.status;
             perguntaAtualId = estado.pergunta_atual_id;
+            buscarEnergia();
 
             const badge = document.getElementById('p-status');
             const info = document.getElementById('round-info');
@@ -442,6 +474,7 @@
                     alternativaSelecionada = null;
                     buffSelecionado = null;
                     alvoSelecionado = null;
+                    buffDaRodada = null;
                     document.getElementById('btn-confirmar-resposta').style.display = 'none';
                     atualizarContadorBuffs();
                     resetVisualBotoes();
@@ -463,6 +496,7 @@
                     info.innerText = "Escolha sua opção:";
                     setButtonsEnabled(true);
                 }
+                restaurar5050();
             } else {
                 fecharModalBuff(); 
                 document.getElementById('btn-confirmar-resposta').style.display = 'none';
@@ -484,22 +518,108 @@
                 b.classList.remove('hidden-5050', 'selected', 'not-selected'); 
                 b.disabled = false; 
             });
-            document.querySelectorAll('.buff-card').forEach(c => {
-                if (!buffsUsados.has(c.id.replace('buff-', ''))) c.classList.remove('selected');
-            });
+            document.querySelectorAll('.buff-card').forEach(c => c.classList.remove('selected'));
         }
 
         function atualizarContadorBuffs() {
-            const disponiveis = TOTAL_BUFFS - buffsUsados.size;
+            const energia = parseInt(jogadorAtual && jogadorAtual.energia) || 0;
             const label = document.getElementById('buff-active-label');
-            if (buffSelecionado) label.innerText = `Buff ativo na rodada!`;
-            else label.innerText = `${disponiveis}/${TOTAL_BUFFS} disponíveis`;
+            if (buffSelecionado || buffDaRodada) label.innerText = `⚡ ${energia} · Buff ativo na rodada!`;
+            else label.innerText = `⚡ ${energia} energia`;
+            document.querySelectorAll('.buff-card').forEach(c => c.classList.toggle('sem-energia', energia < CUSTO_BUFF));
+        }
+
+        // ===== ENERGIA (fonte da verdade = banco) =====
+        async function gastarEnergia() {
+            versaoEnergia++;
+            try {
+                const { data } = await supabaseClient.from('jogadores').select('energia').eq('id', jogadorAtual.id).single();
+                const atual = parseInt(data && data.energia) || 0;
+                if (atual < CUSTO_BUFF) { jogadorAtual.energia = atual; return false; }
+                const { error } = await supabaseClient.from('jogadores').update({ energia: atual - CUSTO_BUFF }).eq('id', jogadorAtual.id);
+                if (error) return false;
+                jogadorAtual.energia = atual - CUSTO_BUFF;
+                return true;
+            } catch (e) {
+                return false;
+            } finally {
+                versaoEnergia++;
+                atualizarContadorBuffs();
+            }
+        }
+
+        async function devolverEnergia() {
+            versaoEnergia++;
+            try {
+                const { data } = await supabaseClient.from('jogadores').select('energia').eq('id', jogadorAtual.id).single();
+                const nova = (parseInt(data && data.energia) || 0) + CUSTO_BUFF;
+                await supabaseClient.from('jogadores').update({ energia: nova }).eq('id', jogadorAtual.id);
+                jogadorAtual.energia = nova;
+            } catch (e) {} finally {
+                versaoEnergia++;
+                atualizarContadorBuffs();
+            }
+        }
+
+        // Puxa a energia do banco (reflete o que o admin deu e o que foi gasto)
+        async function buscarEnergia() {
+            if (!jogadorAtual || !supabaseClient) return;
+            const v = versaoEnergia;
+            try {
+                const { data } = await supabaseClient.from('jogadores').select('energia').eq('id', jogadorAtual.id).single();
+                if (!data || v !== versaoEnergia) return;
+                const nova = parseInt(data.energia) || 0;
+                const antiga = parseInt(jogadorAtual.energia) || 0;
+                jogadorAtual.energia = nova;
+                if (nova > antiga) mostrarToast(`⚡ Você recebeu +${nova - antiga} de energia!`);
+                atualizarContadorBuffs();
+            } catch (e) {}
+        }
+
+        function iniciarMonitorEnergia() {
+            if (pollEnergia) clearInterval(pollEnergia);
+            if (canalEnergia) supabaseClient.removeChannel(canalEnergia);
+            pollEnergia = setInterval(buscarEnergia, 5000);   // garantia mesmo sem Realtime na tabela
+            canalEnergia = supabaseClient.channel('energia_' + jogadorAtual.id + '_' + Date.now())
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jogadores', filter: `id=eq.${jogadorAtual.id}` }, () => buscarEnergia())
+                .subscribe();
+        }
+
+        function pararMonitores() {
+            if (pollEnergia) { clearInterval(pollEnergia); pollEnergia = null; }
+            if (canalEnergia) { supabaseClient.removeChannel(canalEnergia); canalEnergia = null; }
+            if (canalBuffs) { supabaseClient.removeChannel(canalBuffs); canalBuffs = null; }
+        }
+
+        // ===== NOTIFICAÇÕES ANÔNIMAS DE BUFF =====
+        function escutarBuffsGlobais() {
+            if (canalBuffs) supabaseClient.removeChannel(canalBuffs);
+            canalBuffs = supabaseClient.channel('quiz_buffs_globais', { config: { broadcast: { self: false } } })
+                .on('broadcast', { event: 'buff_usado' }, ({ payload }) => {
+                    const msg = TEXTO_NOTIFICACAO[payload && payload.buff];
+                    if (msg) mostrarToast(msg);
+                }).subscribe();
+        }
+
+        function notificarBuff(buff) {
+            try { if (canalBuffs) canalBuffs.send({ type: 'broadcast', event: 'buff_usado', payload: { buff } }); } catch (e) {}
+        }
+
+        function mostrarToast(texto) {
+            const box = document.getElementById('toast-container');
+            if (!box) return;
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.textContent = texto;
+            box.appendChild(t);
+            setTimeout(() => t.remove(), 4500);
         }
 
         async function abrirModalBuff(buffKey) {
             if (respostaEnviada || statusPartida !== 'aceitando_respostas') return;
-            if (buffsUsados.has(buffKey)) return; 
-            if (buffSelecionado) return alert("Você já escolheu um buff para usar nesta rodada!");
+            if (!jogadorAtual) return;
+            if ((parseInt(jogadorAtual.energia) || 0) < CUSTO_BUFF) return alert("Você está sem energia ⚡! Peça ao host ou espere um bônus."); 
+            if (buffSelecionado || buffDaRodada) return alert("Você já escolheu um buff para usar nesta rodada!");
 
             buffEmEdicao = buffKey;
             const info = DICIONARIO_BUFFS[buffKey];
@@ -555,26 +675,61 @@
             }
 
             buffSelecionado = key;
+            buffDaRodada = key;
             document.getElementById('buff-' + key).classList.add('selected');
             atualizarContadorBuffs();
             fecharModalBuff();
         }
 
         function executarChuteCego() {
-            const opes = ['A', 'B', 'C', 'D', 'E'];
-            buffSelecionado = 'chute'; 
-            alternativaSelecionada = opes[Math.floor(Math.random() * opes.length)];
+            buffSelecionado = 'chute';
+            buffDaRodada = 'chute';
+            alternativaSelecionada = LETRAS[Math.floor(Math.random() * LETRAS.length)];
             enviarRespostaFinal();
         }
 
-        function executar5050() {
-            buffsUsados.add('5050');
-            document.getElementById('buff-5050').classList.add('used');
-            atualizarContadorBuffs();
+        // 50/50: lê o gabarito da rodada e esconde 2 alternativas ERRADAS (sobram a certa + 1 errada)
+        async function executar5050() {
+            buffDaRodada = '5050';
+            let correta = null;
+            try {
+                const { data } = await supabaseClient.from('quiz_gabarito').select('resposta_correta').eq('pergunta_id', perguntaAtualId).maybeSingle();
+                correta = data && String(data.resposta_correta).trim().toUpperCase();
+            } catch (e) {}
+            if (!LETRAS.includes(correta)) {
+                buffDaRodada = null;
+                return alert("Não consegui usar o 50/50 agora (gabarito indisponível). Sua energia não foi gasta.");
+            }
+            if (!(await gastarEnergia())) {
+                buffDaRodada = null;
+                return alert("Você está sem energia ⚡!");
+            }
+            const escondidas = LETRAS.filter(l => l !== correta).sort(() => 0.5 - Math.random()).slice(0, 2);
+            aplicar5050(escondidas);
+            try { localStorage.setItem(chave5050(), JSON.stringify(escondidas)); } catch (e) {}
+            notificarBuff('5050');
+        }
 
-            const btns = Array.from(document.querySelectorAll('.btn-answer')).sort(() => 0.5 - Math.random());
-            btns[0].classList.add('hidden-5050');
-            btns[1].classList.add('hidden-5050');
+        function chave5050() { return `quiz_5050_${jogadorAtual.id}_${perguntaAtualId}`; }
+
+        function aplicar5050(escondidas) {
+            document.querySelectorAll('.btn-answer').forEach(b => {
+                if (escondidas.includes(b.querySelector('span').textContent.trim())) b.classList.add('hidden-5050');
+            });
+            if (escondidas.includes(alternativaSelecionada)) {
+                alternativaSelecionada = null;
+                document.getElementById('btn-confirmar-resposta').style.display = 'none';
+                document.querySelectorAll('.btn-answer').forEach(b => b.classList.remove('selected', 'not-selected'));
+            }
+            atualizarContadorBuffs();
+        }
+
+        // Se o jogador deu F5 no meio da rodada, reaplica o 50/50 que ele já pagou
+        function restaurar5050() {
+            try {
+                const salvo = JSON.parse(localStorage.getItem(chave5050()) || 'null');
+                if (Array.isArray(salvo)) { buffDaRodada = '5050'; aplicar5050(salvo); }
+            } catch (e) {}
         }
 
         function selecionarResposta(alternativa) {
@@ -607,17 +762,19 @@
             document.getElementById('btn-confirmar-resposta').style.display = 'none';
             document.getElementById('round-info').innerText = `Opção [ ${alternativa} ] confirmada!`;
 
-            const buffUsadoNesta = buffSelecionado;
-            const alvoDesta = alvoSelecionado;
+            let buffUsadoNesta = buffSelecionado;
+            let alvoDesta = alvoSelecionado;
+            buffSelecionado = null;
+            alvoSelecionado = null;
 
-            if (buffUsadoNesta) {
-                buffsUsados.add(buffUsadoNesta);
-                document.getElementById('buff-' + buffUsadoNesta).classList.remove('selected');
-                document.getElementById('buff-' + buffUsadoNesta).classList.add('used');
-                buffSelecionado = null; 
-                alvoSelecionado = null;
-                atualizarContadorBuffs();
+            if (buffUsadoNesta && !(await gastarEnergia())) {
+                alert("Sem energia ⚡! Sua resposta foi enviada SEM o buff.");
+                buffUsadoNesta = null;
+                alvoDesta = null;
+                buffDaRodada = null;
             }
+            document.querySelectorAll('.buff-card').forEach(c => c.classList.remove('selected'));
+            atualizarContadorBuffs();
 
             const payload = {
                 jogador_id: jogadorAtual.id,
@@ -627,7 +784,17 @@
             };
             if (alvoDesta) payload.alvo_id = alvoDesta;
 
-            await supabaseClient.from('respostas_rodada').insert([payload]);
+            const { error } = await supabaseClient.from('respostas_rodada').insert([payload]);
+            if (error) {
+                if (buffUsadoNesta) await devolverEnergia();
+                respostaEnviada = false;
+                buffDaRodada = null;
+                setButtonsEnabled(true);
+                document.getElementById('round-info').innerText = "Erro ao enviar. Tente confirmar de novo.";
+                document.getElementById('btn-confirmar-resposta').style.display = 'block';
+                return;
+            }
+            if (buffUsadoNesta) notificarBuff(buffUsadoNesta);
         }
 
         async function abrirMenuJogadores() {
