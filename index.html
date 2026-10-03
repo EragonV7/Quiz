@@ -306,6 +306,8 @@
         let canalRealtime = null;
         let canalBuffs = null;
         let canalEnergia = null;
+        let canalPresenca = null;
+        let onlineIds = new Set();
         let pollEnergia = null;
         let versaoEnergia = 0;
         let buffDaRodada = null;   // qualquer buff já usado/selecionado nesta rodada (inclui 50/50)
@@ -445,6 +447,7 @@
             escutarEstadoPartida();
             escutarBuffsGlobais();
             iniciarMonitorEnergia();
+            entrarPresenca();
         }
 
         function escutarEstadoPartida() {
@@ -566,8 +569,14 @@
             if (!jogadorAtual || !supabaseClient) return;
             const v = versaoEnergia;
             try {
-                const { data } = await supabaseClient.from('jogadores').select('energia').eq('id', jogadorAtual.id).single();
-                if (!data || v !== versaoEnergia) return;
+                const { data, error } = await supabaseClient.from('jogadores').select('energia').eq('id', jogadorAtual.id).maybeSingle();
+                if (v !== versaoEnergia) return;
+                if (!data && !error) {   // o host excluiu este jogador
+                    alert("Você foi removido da partida pelo host.");
+                    sairDoPerfil();
+                    return;
+                }
+                if (!data) return;
                 const nova = parseInt(data.energia) || 0;
                 const antiga = parseInt(jogadorAtual.energia) || 0;
                 jogadorAtual.energia = nova;
@@ -589,6 +598,7 @@
             if (pollEnergia) { clearInterval(pollEnergia); pollEnergia = null; }
             if (canalEnergia) { supabaseClient.removeChannel(canalEnergia); canalEnergia = null; }
             if (canalBuffs) { supabaseClient.removeChannel(canalBuffs); canalBuffs = null; }
+            if (canalPresenca) { supabaseClient.removeChannel(canalPresenca); canalPresenca = null; }
         }
 
         // ===== NOTIFICAÇÕES ANÔNIMAS DE BUFF =====
@@ -599,6 +609,19 @@
                     const msg = TEXTO_NOTIFICACAO[payload && payload.buff];
                     if (msg) mostrarToast(msg);
                 }).subscribe();
+        }
+
+        // Avisa o host (e os outros) que este jogador está online
+        function entrarPresenca() {
+            if (canalPresenca) supabaseClient.removeChannel(canalPresenca);
+            const canal = supabaseClient.channel('quiz_presence', { config: { presence: { key: String(jogadorAtual.id) } } });
+            canal.on('presence', { event: 'sync' }, () => {
+                onlineIds = new Set();
+                Object.values(canal.presenceState()).forEach(arr => arr.forEach(p => { if (p.jogador_id != null) onlineIds.add(String(p.jogador_id)); }));
+            }).subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') await canal.track({ jogador_id: jogadorAtual.id });
+            });
+            canalPresenca = canal;
         }
 
         function notificarBuff(buff) {
@@ -814,7 +837,7 @@
                         <div class="player-item">
                             <img src="${fotoUrl}" onerror="this.src=getAvatarFallback('${j.nome}')">
                             <div class="player-item-info">
-                                <span class="player-item-name">${j.nome}</span>
+                                <span class="player-item-name"><span style="color:${onlineIds.has(String(j.id)) ? '#2ecc71' : '#555'}">●</span> ${j.nome}</span>
                                 ${isMe}
                             </div>
                         </div>
