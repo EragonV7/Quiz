@@ -142,6 +142,10 @@
         const ENERGIA_INICIAL = 3; // ⚡ de cada jogador ao resetar (mesmo valor do index.html)
         let meuGrafico = null;
         let calculando = false;
+        let ultimaSecaoEm = null;
+        let ATRASO_RESULTADO_MS = 5000;   // quanto tempo depois do "Encerrar" a resposta correta aparece pros jogadores
+        let timerResultado = null;
+        let canalEventos = null;
         let ultimaCalculada = null;
         let onlineIds = new Set();
         const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -158,11 +162,13 @@
             escutarRespostas();
             escutarEstado();
             escutarPresenca();
+            iniciarCanalEventos();
         });
 
         async function prepararRodada() {
             const questaoNum = document.getElementById('input-questao').value;
             ultimaCalculada = null;
+            if (timerResultado) { clearTimeout(timerResultado); timerResultado = null; }
             document.getElementById('painel-insights').style.display = 'none';
             document.getElementById('answers-list').innerHTML = '<tr><td colspan="3" class="empty-msg">Aguardando respostas...</td></tr>';
             await supabaseClient.from('partida_estado').update({ status: 'aguardando_jogadores', pergunta_atual_id: questaoNum }).eq('id', 1);
@@ -170,6 +176,7 @@
         }
 
         async function liberarValendo() {
+            if (timerResultado) { clearTimeout(timerResultado); timerResultado = null; }
             const questaoNum = document.getElementById('input-questao').value;
             await supabaseClient.from('partida_estado').update({ status: 'aceitando_respostas', pergunta_atual_id: questaoNum }).eq('id', 1);
             document.getElementById('current-status').innerText = `Status: VALENDO QUESTÃO ${questaoNum} 🔥`;
@@ -303,6 +310,7 @@
                 `;
                 
                 await carregarJogadores();
+                agendarResultado(questaoNum, correta);
                 return true;
             } catch (err) {
                 console.error(err);
@@ -311,23 +319,44 @@
         }
 
         async function encerrarSecaoBonus() {
-            if (!confirm("Isso vai dar 1 Buff (Energia) para o último colocado. Tem certeza?")) return;
+            await carregarJogadores();
+            const q = String(document.getElementById('input-questao').value);
+            const todos = Object.values(jogadoresMap);
+            if (todos.length === 0) return alert("Nenhum jogador encontrado!");
 
-            let rankArr = Object.values(jogadoresMap).sort((a,b) => (a.pontos||0) - (b.pontos||0));
-            if (rankArr.length === 0) return alert("Nenhum jogador encontrado!");
+            const menor = Math.min(...todos.map(j => parseInt(j.pontos) || 0));
+            const ultimos = todos.filter(j => (parseInt(j.pontos) || 0) === menor);
+            const nomes = ultimos.map(j => j.nome).join(', ');
 
-            let ultimo = rankArr[0];
-            const { data: fresco } = await supabaseClient.from('jogadores').select('energia').eq('id', ultimo.id).single();
-            let novaEnergia = (parseInt(fresco ? fresco.energia : ultimo.energia) || 0) + 1;
+            if (ultimaSecaoEm === q && !confirm(`⚠️ Você JÁ finalizou uma seção na pergunta ${q}.\n\nFinalizar de novo vai dar o bônus mais uma vez. Continuar?`)) return;
+            if (!confirm(`🏁 Realmente deseja FINALIZAR A SEÇÃO na pergunta ${q}?\n\nÚltimo colocado (${menor} pts): ${nomes}\nReceberá +1 ⚡ de bônus.\n\nEssa ação não pode ser desfeita.`)) return;
 
-            await supabaseClient.from('jogadores').update({ energia: novaEnergia }).eq('id', ultimo.id);
+            for (const j of ultimos) {
+                const { data: fresco } = await supabaseClient.from('jogadores').select('energia').eq('id', j.id).single();
+                const nova = (parseInt(fresco ? fresco.energia : j.energia) || 0) + 1;
+                await supabaseClient.from('jogadores').update({ energia: nova }).eq('id', j.id);
+            }
+            ultimaSecaoEm = q;
 
             document.getElementById('painel-insights').style.display = 'block';
             document.getElementById('insight-texto').innerHTML = `
-                <strong style="color:#ff0080; font-size:16px;">🏁 SEÇÃO ENCERRADA!</strong><br>
-                ⚡ <b>${esc(ultimo.nome)}</b> (último colocado com ${ultimo.pontos || 0} pts) recebeu <b>+1 Buff/Energia</b> de bônus!
+                <strong style="color:#ff0080; font-size:16px;">🏁 SEÇÃO ENCERRADA na pergunta ${esc(q)}!</strong><br>
+                ⚡ <b>${esc(nomes)}</b> (último colocado com ${menor} pts) recebeu <b>+1 Buff/Energia</b> de bônus!
             `;
             await carregarJogadores();
+        }
+
+        // ---- Aviso da resposta correta para os jogadores (com atraso) ----
+        function iniciarCanalEventos() {
+            canalEventos = supabaseClient.channel('quiz_buffs_globais', { config: { broadcast: { self: false } } }).subscribe();
+        }
+
+        function agendarResultado(pergunta, correta) {
+            if (timerResultado) clearTimeout(timerResultado);
+            timerResultado = setTimeout(() => {
+                timerResultado = null;
+                try { if (canalEventos) canalEventos.send({ type: 'broadcast', event: 'resultado', payload: { pergunta: String(pergunta), correta: String(correta).trim().toUpperCase() } }); } catch (e) {}
+            }, ATRASO_RESULTADO_MS);
         }
 
         async function carregarJogadores() {
