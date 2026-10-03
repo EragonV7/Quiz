@@ -115,6 +115,10 @@
         .buff-icon { font-size: 18px; }
         .buffs-grid .buff-card:last-child:nth-child(3n+1) { grid-column: 1 / -1; }
         .buff-card.sem-energia { opacity: 0.4; }
+        .btn-answer.correta { outline: 3px solid #2ecc71; box-shadow: 0 0 14px rgba(46,204,113,0.6); }
+        .buffs-feed { background: #120e24; border: 1px dashed #362a5f; border-radius: 12px; padding: 8px 10px; display: none; }
+        .feed-title { font-size: 11px; color: #a0a0c0; margin-bottom: 6px; }
+        .feed-chip { display: inline-block; background: #221a3f; border: 1px solid #7928ca; border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; margin: 0 6px 4px 0; }
         #toast-container { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 8px; width: min(92vw, 380px); pointer-events: none; }
         .toast { background: #221a3f; border: 1px solid #7928ca; color: #fff; padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.4); animation: toastIn 0.25s ease; }
         @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
@@ -244,6 +248,8 @@
                 </div>
             </div>
 
+            <div class="buffs-feed" id="buffs-feed"></div>
+
             <div class="answers-grid" id="answersGrid">
                 <button class="btn-answer btn-a" onclick="selecionarResposta('A')"><span>A</span> <span>&gt;</span></button>
                 <button class="btn-answer btn-b" onclick="selecionarResposta('B')"><span>B</span> <span>&gt;</span></button>
@@ -308,6 +314,9 @@
         let canalEnergia = null;
         let canalPresenca = null;
         let onlineIds = new Set();
+        let buffsRodada = {};          // buffs usados pelos OUTROS nesta rodada (anônimo)
+        let resultadoLiberado = false;
+        let BUFFS_VISIVEIS_AO_VIVO = true;   // false = só mostra os buffs usados depois que o resultado sair
         let pollEnergia = null;
         let versaoEnergia = 0;
         let buffDaRodada = null;   // qualquer buff já usado/selecionado nesta rodada (inclui 50/50)
@@ -478,6 +487,9 @@
                     buffSelecionado = null;
                     alvoSelecionado = null;
                     buffDaRodada = null;
+                    buffsRodada = {};
+                    resultadoLiberado = false;
+                    renderBuffsFeed();
                     document.getElementById('btn-confirmar-resposta').style.display = 'none';
                     atualizarContadorBuffs();
                     resetVisualBotoes();
@@ -518,7 +530,7 @@
 
         function resetVisualBotoes() {
             document.querySelectorAll('.btn-answer').forEach(b => { 
-                b.classList.remove('hidden-5050', 'selected', 'not-selected'); 
+                b.classList.remove('hidden-5050', 'selected', 'not-selected', 'correta'); 
                 b.disabled = false; 
             });
             document.querySelectorAll('.buff-card').forEach(c => c.classList.remove('selected'));
@@ -602,13 +614,52 @@
         }
 
         // ===== NOTIFICAÇÕES ANÔNIMAS DE BUFF =====
+        const NOME_BUFF = {
+            dobro: '⚡ Dobro ou Nada', escudo: '🛡️ Escudo', vampiro: '🧛 Vampiro', maria: '👯 Maria Vai Com As Outras',
+            chute: '🎲 Chute Cego', '5050': '✂️ 50/50', troca: '🔄 Troca-Troca'
+        };
+
         function escutarBuffsGlobais() {
             if (canalBuffs) supabaseClient.removeChannel(canalBuffs);
             canalBuffs = supabaseClient.channel('quiz_buffs_globais', { config: { broadcast: { self: false } } })
-                .on('broadcast', { event: 'buff_usado' }, ({ payload }) => {
-                    const msg = TEXTO_NOTIFICACAO[payload && payload.buff];
-                    if (msg) mostrarToast(msg);
-                }).subscribe();
+                .on('broadcast', { event: 'buff_usado' }, ({ payload }) => registrarBuffRodada(payload && payload.buff))
+                .on('broadcast', { event: 'resultado' }, ({ payload }) => mostrarResultado(payload))
+                .subscribe();
+        }
+
+        // Alguém (anônimo) usou um buff nesta rodada
+        function registrarBuffRodada(buff) {
+            if (!NOME_BUFF[buff]) return;
+            buffsRodada[buff] = (buffsRodada[buff] || 0) + 1;
+            if (BUFFS_VISIVEIS_AO_VIVO) mostrarToast(TEXTO_NOTIFICACAO[buff]);
+            renderBuffsFeed();
+        }
+
+        function renderBuffsFeed() {
+            const el = document.getElementById('buffs-feed');
+            if (!el) return;
+            const itens = Object.entries(buffsRodada);
+            if (!(BUFFS_VISIVEIS_AO_VIVO || resultadoLiberado) || itens.length === 0) {
+                el.style.display = 'none';
+                el.innerHTML = '';
+                return;
+            }
+            el.style.display = 'block';
+            el.innerHTML = '<div class="feed-title">🔔 Buffs usados pelos outros nesta rodada</div>' +
+                itens.map(([k, n]) => `<span class="feed-chip">${NOME_BUFF[k]}${n > 1 ? ' ×' + n : ''}</span>`).join('');
+        }
+
+        // O host encerrou: revela a alternativa correta
+        function mostrarResultado(p) {
+            if (!p || !LETRAS.includes(String(p.correta))) return;
+            if (perguntaAtualId != null && String(p.pergunta) !== String(perguntaAtualId)) return;
+            resultadoLiberado = true;
+            document.querySelectorAll('.btn-answer').forEach(b => {
+                if (b.querySelector('span').textContent.trim() === p.correta) b.classList.add('correta');
+            });
+            document.getElementById('round-info').innerText = `✅ Resposta correta: letra ${p.correta}`;
+            mostrarToast(`✅ Resposta correta: letra ${p.correta}`, 8000);
+            renderBuffsFeed();
         }
 
         // Avisa o host (e os outros) que este jogador está online
@@ -628,14 +679,14 @@
             try { if (canalBuffs) canalBuffs.send({ type: 'broadcast', event: 'buff_usado', payload: { buff } }); } catch (e) {}
         }
 
-        function mostrarToast(texto) {
+        function mostrarToast(texto, ms = 4500) {
             const box = document.getElementById('toast-container');
             if (!box) return;
             const t = document.createElement('div');
             t.className = 'toast';
             t.textContent = texto;
             box.appendChild(t);
-            setTimeout(() => t.remove(), 4500);
+            setTimeout(() => t.remove(), ms);
         }
 
         async function abrirModalBuff(buffKey) {
