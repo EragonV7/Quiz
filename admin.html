@@ -198,6 +198,7 @@
             document.getElementById('answers-list').innerHTML = '<tr><td colspan="3" class="empty-msg">Aguardando respostas...</td></tr>';
             await supabaseClient.from('partida_estado').update({ status: 'aguardando_jogadores', pergunta_atual_id: questaoNum }).eq('id', 1);
             document.getElementById('current-status').innerText = `Status: PREPARANDO QUESTÃO ${questaoNum}`;
+            atualizarContagem();
         }
 
         async function liberarValendo() {
