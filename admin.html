@@ -180,7 +180,18 @@
         });
 
         async function prepararRodada() {
-            const questaoNum = document.getElementById('input-questao').value;
+            const questaoNum = String(document.getElementById('input-questao').value);
+
+            // Se a questão já tem respostas (teste anterior / repetição), elas precisam ser apagadas para recomeçar
+            const { data: antigas } = await supabaseClient.from('respostas_rodada').select('jogador_id').eq('pergunta_id', questaoNum);
+            if (antigas && antigas.length > 0) {
+                if (!confirm(`A questão ${questaoNum} já tem ${antigas.length} resposta(s) salva(s) (de um teste ou rodada anterior).\n\nPara recomeçar essa questão elas precisam ser APAGADAS. Apagar e preparar?`)) return;
+                const { data: apagadas, error } = await supabaseClient.from('respostas_rodada').delete().eq('pergunta_id', questaoNum).select();
+                if (error || !apagadas || apagadas.length < antigas.length) {
+                    return alert(`Não consegui apagar as respostas antigas da questão ${questaoNum}.\nO Supabase provavelmente bloqueou o DELETE (falta a policy de DELETE na tabela respostas_rodada).`);
+                }
+            }
+
             ultimaCalculada = null;
             if (timerResultado) { clearTimeout(timerResultado); timerResultado = null; }
             document.getElementById('painel-insights').style.display = 'none';
@@ -505,19 +516,33 @@
         }
 
         async function resetarTudo() {
-            if (!confirm("⚠️ ALERTA VERMELHO!\n\nVocê está prestes a ZERAR os pontos e buffs de TODOS os jogadores.\nIsso não pode ser desfeito. Tem certeza?")) return;
+            if (!confirm("⚠️ ALERTA VERMELHO!\n\nVocê está prestes a ZERAR os pontos, devolver a energia e APAGAR as respostas de TODOS os jogadores (a partida volta para a questão 1).\nIsso não pode ser desfeito. Tem certeza?")) return;
             if (!confirm("Último aviso: Clicando em OK, o jogo inteiro voltará para ZERO. Quer mesmo fazer isso?")) return;
 
             try {
-                // Cria uma promessa de atualização simultânea para CADA jogador usando o ID original numérico
-                const promessas = Object.values(jogadoresMap).map(jogador => {
-                    return supabaseClient.from('jogadores').update({ pontos: 0, energia: ENERGIA_INICIAL }).eq('id', jogador.id);
-                });
-                
-                // Dispara todas as atualizações de uma vez
-                await Promise.all(promessas);
-                
-                alert("♻️ Jogo resetado! Pontos zerados e energia de volta para ⚡" + ENERGIA_INICIAL + ".");
+                const lista = Object.values(jogadoresMap);
+
+                // 1) zera pontos e devolve a energia inicial
+                await Promise.all(lista.map(j => supabaseClient.from('jogadores').update({ pontos: 0, energia: ENERGIA_INICIAL }).eq('id', j.id)));
+
+                // 2) apaga TODAS as respostas (senão os jogadores continuam "já respondeu" ao repetir uma questão)
+                await Promise.all(lista.map(j => supabaseClient.from('respostas_rodada').delete().eq('jogador_id', j.id)));
+                const { data: sobrou } = await supabaseClient.from('respostas_rodada').select('jogador_id');
+                const falhouDelete = !!(sobrou && sobrou.length > 0);
+
+                // 3) volta a partida para o começo
+                await supabaseClient.from('partida_estado').update({ status: 'aguardando_jogadores', pergunta_atual_id: '1' }).eq('id', 1);
+                document.getElementById('input-questao').value = 1;
+                document.getElementById('answers-list').innerHTML = '<tr><td colspan="3" class="empty-msg">Aguardando respostas...</td></tr>';
+                document.getElementById('painel-insights').style.display = 'none';
+                ultimaCalculada = null;
+                ultimaSecaoEm = null;
+                if (timerResultado) { clearTimeout(timerResultado); timerResultado = null; }
+                mostrarStatus({ status: 'aguardando_jogadores', pergunta_atual_id: '1' });
+                atualizarContagem();
+
+                alert("♻️ Jogo resetado! Pontos zerados, energia de volta para ⚡" + ENERGIA_INICIAL + " e partida na questão 1." +
+                      (falhouDelete ? "\n\n⚠️ Mas NÃO consegui apagar as respostas antigas (falta a policy de DELETE na tabela respostas_rodada). Os jogadores podem continuar aparecendo como 'já respondeu'." : ""));
                 await carregarJogadores();
             } catch (err) {
                 console.error("Erro ao resetar banco de dados:", err);
