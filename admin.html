@@ -108,7 +108,7 @@
             <div class="panel" style="flex: 1; min-width: 320px;">
                 <h3 style="color: #ff0080; margin-bottom: 10px;">⚡ Controle Divino (Recompensas e Punições)</h3>
                 <select id="admin-alvo" class="input-modern" style="width: 100%; margin-bottom: 10px;"></select>
-                <input type="number" id="admin-pontos" class="input-modern" placeholder="Pontos extras (Ex: 50)" style="width: 100%; margin-bottom: 10px;">
+                <input type="number" id="admin-pontos" class="input-modern" placeholder="Pontos extras (Ex: 5)" style="width: 100%; margin-bottom: 10px;">
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                     <button class="btn-divino" style="background:#00f2fe; color:#000;" onclick="aplicarPoderDivino('pontos')">+ Pontos 🎁</button>
                     <button class="btn-divino" style="background:#7928ca; color:#fff;" onclick="aplicarPoderDivino('energia')">+1 Buff ⚡</button>
@@ -146,6 +146,20 @@
         let ATRASO_RESULTADO_MS = 5000;   // quanto tempo depois do "Encerrar" a resposta correta aparece pros jogadores
         let timerResultado = null;
         let canalEventos = null;
+
+        // ===== REGRAS DE PONTUAÇÃO (escala 1 a 10, adapta ao nº de jogadores que responderam) =====
+        const PONTOS_MIN = 1;                   // pergunta fácil: só 1 jogador errou
+        const PONTOS_MAX = 10;                  // pergunta difícil: só 1 jogador acertou
+        const ROUBO_VAMPIRO = 5;                // máximo que o Vampiro suga do alvo
+        const PONTOS_FACIL_COM_DOBRO = 1;       // todos acertaram: quem usou Dobro ganha isso (fixo, sem dobrar)
+        const PONTOS_CONSOLACAO = 1;            // todos erraram: último colocado ganha isso
+
+        // total = quem respondeu; acertos entre 1 e total-1. Menos acertos = pergunta vale mais.
+        function valorDaPergunta(acertos, total) {
+            if (total <= 2) return PONTOS_MAX;
+            const erros = total - acertos;      // 1 .. total-1
+            return Math.round(PONTOS_MIN + (PONTOS_MAX - PONTOS_MIN) * (erros - 1) / (total - 2));
+        }
         let ultimaCalculada = null;
         let onlineIds = new Set();
         const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -236,68 +250,81 @@
                 let acertos = 0;
                 respostas.forEach(r => { if (r.alternativa === correta) acertos++; });
                 let pontosDistribuidos = 0;
+                const total = respostas.length;
+                const modoFacil = total > 0 && acertos === total;   // todo mundo acertou
 
-                if (respostas.length > 0) {
-                    if (acertos === respostas.length) {
-                        eventoEspecial += "<br>😴 Todos acertaram, ninguém pontua.";
-                    } else if (acertos === 0) {
-                        let rankArr = Object.values(jogadoresMap).sort((a,b) => (a.pontos||0) - (b.pontos||0));
-                        if(rankArr.length > 0) {
-                            let ultimo = rankArr[0];
-                            let nv = parseInt(ultimo.pontos || 0) + 10;
-                            await supabaseClient.from('jogadores').update({ pontos: nv }).eq('id', ultimo.id);
-                            pontosDistribuidos = 10;
-                            eventoEspecial += `<br>😭 Todos erraram! 10 pts de consolação para ${esc(ultimo.nome)}.`;
-                        }
+                if (total > 0 && acertos === 0) {
+                    let rankArr = Object.values(jogadoresMap).sort((a,b) => (a.pontos||0) - (b.pontos||0));
+                    if (rankArr.length > 0) {
+                        let ultimo = rankArr[0];
+                        let nv = parseInt(ultimo.pontos || 0) + PONTOS_CONSOLACAO;
+                        await supabaseClient.from('jogadores').update({ pontos: nv }).eq('id', ultimo.id);
+                        pontosDistribuidos = PONTOS_CONSOLACAO;
+                        eventoEspecial += `<br>😭 Todos erraram! ${PONTOS_CONSOLACAO} pt de consolação para ${esc(ultimo.nome)}.`;
+                    }
+                } else if (total > 0) {
+                    const pontosBase = modoFacil ? 0 : valorDaPergunta(acertos, total);
+                    const antes = {}, ganhos = {};
+                    Object.keys(jogadoresMap).forEach(id => { antes[id] = parseInt(jogadoresMap[id].pontos) || 0; ganhos[id] = 0; });
+                    const blindado = id => !!(porJogador[id] && porJogador[id].buff_usado === 'escudo');
+                    const ataqueValido = r => r.alternativa === correta && r.alvo_id && (r.alvo_id in ganhos) && (r.jogador_id in ganhos);
+
+                    // 1) pontos da rodada (+ Dobro ou Nada)
+                    if (modoFacil) {
+                        const dobradores = respostas.filter(r => r.buff_usado === 'dobro' && (r.jogador_id in ganhos));
+                        dobradores.forEach(r => { ganhos[r.jogador_id] += PONTOS_FACIL_COM_DOBRO; });
+                        eventoEspecial += dobradores.length
+                            ? `<br>😴 Todos acertaram: só quem usou Dobro pontua (${PONTOS_FACIL_COM_DOBRO} pt fixo, sem dobrar).`
+                            : "<br>😴 Todos acertaram, ninguém pontua.";
                     } else {
-                        const pontosBase = Math.max(10, 100 - ((acertos - 1) * 10));
-                        const antes = {}, ganhos = {};
-                        Object.keys(jogadoresMap).forEach(id => { antes[id] = parseInt(jogadoresMap[id].pontos) || 0; ganhos[id] = 0; });
-                        const blindado = id => !!(porJogador[id] && porJogador[id].buff_usado === 'escudo');
-                        const ataqueValido = r => r.alternativa === correta && r.alvo_id && (r.alvo_id in ganhos) && (r.jogador_id in ganhos);
-
-                        // 1) pontos normais (+ Dobro ou Nada)
                         for (let r of respostas) {
                             if (!(r.jogador_id in ganhos)) continue;
                             if (r.alternativa === correta) ganhos[r.jogador_id] += pontosBase * (r.buff_usado === 'dobro' ? 2 : 1);
                             else if (r.buff_usado === 'dobro') ganhos[r.jogador_id] -= pontosBase * 2;
                         }
+                    }
 
-                        // 2) Vampiro (suga no máximo o que o alvo tem; Escudo bloqueia)
-                        for (let r of respostas) {
-                            if (r.buff_usado !== 'vampiro' || !ataqueValido(r)) continue;
-                            if (blindado(r.alvo_id)) {
-                                eventoEspecial += `<br>🛡️ <b>${nomeDe(r.alvo_id)}</b> bloqueou o Vampiro de <b>${nomeDe(r.jogador_id)}</b>!`;
-                                continue;
-                            }
-                            const roubo = Math.min(50, Math.max(0, antes[r.alvo_id] + ganhos[r.alvo_id]));
-                            ganhos[r.jogador_id] += roubo;
-                            ganhos[r.alvo_id] -= roubo;
-                            eventoEspecial += `<br>🧛‍♂️ <b>${nomeDe(r.jogador_id)}</b> sugou ${roubo} pts de <b>${nomeDe(r.alvo_id)}</b>!`;
+                    // 2) Vampiro (Escudo bloqueia). Pergunta normal: suga do total do alvo. Todos acertaram: só o que o alvo ganhou agora.
+                    for (let r of respostas) {
+                        if (r.buff_usado !== 'vampiro' || !ataqueValido(r)) continue;
+                        if (blindado(r.alvo_id)) {
+                            eventoEspecial += `<br>🛡️ <b>${nomeDe(r.alvo_id)}</b> bloqueou o Vampiro de <b>${nomeDe(r.jogador_id)}</b>!`;
+                            continue;
                         }
+                        const disponivel = modoFacil ? ganhos[r.alvo_id] : antes[r.alvo_id] + ganhos[r.alvo_id];
+                        const roubo = Math.min(ROUBO_VAMPIRO, Math.max(0, disponivel));
+                        ganhos[r.jogador_id] += roubo;
+                        ganhos[r.alvo_id] -= roubo;
+                        eventoEspecial += roubo > 0
+                            ? `<br>🧛‍♂️ <b>${nomeDe(r.jogador_id)}</b> sugou ${roubo} pts de <b>${nomeDe(r.alvo_id)}</b>!`
+                            : `<br>🧛‍♂️ <b>${nomeDe(r.jogador_id)}</b> tentou sugar <b>${nomeDe(r.alvo_id)}</b>, mas não havia pontos!`;
+                    }
 
-                        // 3) totais depois de pontos + vampiros (nunca abaixo de 0)
-                        const novo = {};
-                        Object.keys(ganhos).forEach(id => { novo[id] = Math.max(0, antes[id] + ganhos[id]); });
+                    // 3) totais depois de pontos + vampiros (nunca abaixo de 0)
+                    const novo = {};
+                    Object.keys(ganhos).forEach(id => { novo[id] = Math.max(0, antes[id] + ganhos[id]); });
 
-                        // 4) Troca-Troca (Escudo bloqueia)
-                        for (let r of respostas) {
-                            if (r.buff_usado !== 'troca' || !ataqueValido(r)) continue;
-                            if (blindado(r.alvo_id)) {
-                                eventoEspecial += `<br>🛡️ <b>${nomeDe(r.alvo_id)}</b> bloqueou o Troca-Troca de <b>${nomeDe(r.jogador_id)}</b>!`;
-                                continue;
-                            }
-                            const a = r.jogador_id, b = r.alvo_id;
-                            [novo[a], novo[b]] = [novo[b], novo[a]];
-                            eventoEspecial += `<br>🔄 <b>${nomeDe(a)}</b> trocou de pontuação com <b>${nomeDe(b)}</b>! (${novo[b]} ⇄ ${novo[a]})`;
+                    // 4) Troca-Troca (Escudo bloqueia; sem efeito quando todos acertaram)
+                    for (let r of respostas) {
+                        if (r.buff_usado !== 'troca' || !ataqueValido(r)) continue;
+                        if (modoFacil) {
+                            eventoEspecial += `<br>🔄 O Troca-Troca de <b>${nomeDe(r.jogador_id)}</b> não teve efeito (todos acertaram).`;
+                            continue;
                         }
-
-                        // 5) salvar
-                        for (let id of Object.keys(novo)) {
-                            if (novo[id] === antes[id]) continue;
-                            await supabaseClient.from('jogadores').update({ pontos: novo[id] }).eq('id', jogadoresMap[id].id);
-                            if (novo[id] > antes[id]) pontosDistribuidos += novo[id] - antes[id];
+                        if (blindado(r.alvo_id)) {
+                            eventoEspecial += `<br>🛡️ <b>${nomeDe(r.alvo_id)}</b> bloqueou o Troca-Troca de <b>${nomeDe(r.jogador_id)}</b>!`;
+                            continue;
                         }
+                        const a = r.jogador_id, b = r.alvo_id;
+                        [novo[a], novo[b]] = [novo[b], novo[a]];
+                        eventoEspecial += `<br>🔄 <b>${nomeDe(a)}</b> trocou de pontuação com <b>${nomeDe(b)}</b>! (${novo[b]} ⇄ ${novo[a]})`;
+                    }
+
+                    // 5) salvar
+                    for (let id of Object.keys(novo)) {
+                        if (novo[id] === antes[id]) continue;
+                        await supabaseClient.from('jogadores').update({ pontos: novo[id] }).eq('id', jogadoresMap[id].id);
+                        if (novo[id] > antes[id]) pontosDistribuidos += novo[id] - antes[id];
                     }
                 }
 
