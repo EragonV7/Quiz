@@ -514,6 +514,21 @@
                 restaurar5050();
             } else {
                 fecharModalBuff(); 
+                if (estado.status === 'aguardando_jogadores' && jogadorAtual) {
+                    // Nova rodada sendo preparada: limpa tudo (vale também ao repetir o MESMO número de questão)
+                    try { localStorage.removeItem(chave5050()); } catch (e) {}
+                    window.perguntaAnteriorId = null;
+                    respostaEnviada = false;
+                    alternativaSelecionada = null;
+                    buffSelecionado = null;
+                    alvoSelecionado = null;
+                    buffDaRodada = null;
+                    buffsRodada = {};
+                    resultadoLiberado = false;
+                    renderBuffsFeed();
+                    atualizarContadorBuffs();
+                    resetVisualBotoes();
+                }
                 document.getElementById('btn-confirmar-resposta').style.display = 'none';
                 badge.className = (estado.status === 'tempo_esgotado') ? "status-badge status-locked" : "status-badge status-waiting";
                 badge.innerText = (estado.status === 'tempo_esgotado') ? "TRAVADO" : "AGUARDE";
