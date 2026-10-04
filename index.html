@@ -327,9 +327,9 @@
         const LETRAS = ['A', 'B', 'C', 'D'];
 
         const DICIONARIO_BUFFS = {
-            'dobro': { icon: '⚡', nome: 'Dobro ou Nada', desc: 'Se você acertar ganha o DOBRO de pontos! Se errar, perde o dobro.', precisaAlvo: false },
+            'dobro': { icon: '⚡', nome: 'Dobro ou Nada', desc: 'Se você acertar ganha o DOBRO de pontos! Se errar, perde o dobro. Se TODOS acertarem a pergunta, só você pontua (1 pt).', precisaAlvo: false },
             'escudo': { icon: '🛡️', nome: 'Escudo Protetor', desc: 'Blindagem total: nesta rodada você fica imune a qualquer ataque de outros jogadores (Vampiro, Troca-Troca).', precisaAlvo: false },
-            'vampiro': { icon: '🧛', nome: 'Ataque Vampiro', desc: 'Se você acertar a resposta, vai sugar pontos do jogador que você escolher.', precisaAlvo: true },
+            'vampiro': { icon: '🧛', nome: 'Ataque Vampiro', desc: 'Se você acertar a resposta, suga até 5 pontos do jogador que você escolher. O Escudo dele bloqueia.', precisaAlvo: true },
             'maria': { icon: '👯', nome: 'Maria Vai Com As Outras', desc: 'Não sabe a resposta? Copie automaticamente a opção que o alvo escolhido marcar.', precisaAlvo: true },
             'chute': { icon: '🎲', nome: 'Chute Cego', desc: 'O sistema escolherá uma resposta totalmente aleatória para você e enviará imediatamente.', precisaAlvo: false },
             '5050': { icon: '✂️', nome: '50 / 50', desc: 'O sistema removerá duas opções erradas da tela. Sobram só a certa e uma errada: 50% de chance!', precisaAlvo: false },
