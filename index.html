@@ -312,6 +312,8 @@
         let canalRealtime = null;
         let canalBuffs = null;
         let canalEnergia = null;
+        let pollEstado = null;
+        let enviandoResposta = false;   // true enquanto a resposta está sendo gravada
         let canalPresenca = null;
         let onlineIds = new Set();
         let buffsRodada = {};          // buffs usados pelos OUTROS nesta rodada (anônimo)
@@ -503,6 +505,8 @@
                         respostaEnviada = true;
                         setButtonsEnabled(false);
                         info.innerText = `Resposta confirmada [ ${data.alternativa} ]!`;
+                    } else if (respostaEnviada && !enviandoResposta) {
+                        liberarRespostaLocal();   // o host apagou a resposta / repetiu a questão e este aparelho ficou com estado velho
                     } else {
                         info.innerText = "Escolha sua opção:";
                         setButtonsEnabled(true);
@@ -535,6 +539,39 @@
                 info.innerText = (estado.status === 'tempo_esgotado') ? "Tempo encerrado!" : "Aguardando próxima pergunta...";
                 setButtonsEnabled(false);
             }
+        }
+
+        // Zera o estado "já respondi" deste aparelho e libera os botões de verdade
+        function liberarRespostaLocal() {
+            respostaEnviada = false;
+            alternativaSelecionada = null;
+            buffSelecionado = null;
+            alvoSelecionado = null;
+            buffDaRodada = null;
+            document.getElementById('btn-confirmar-resposta').style.display = 'none';
+            resetVisualBotoes();
+            atualizarContadorBuffs();
+            document.getElementById('round-info').innerText = "Escolha sua opção:";
+            setButtonsEnabled(true);
+            restaurar5050();
+        }
+
+        // Garantia contra evento do Realtime perdido (celular dormiu, rede oscilou...):
+        // a cada 5s confere o estado da partida e se a resposta ainda existe no banco.
+        async function sincronizarEstado() {
+            if (!jogadorAtual || !supabaseClient || enviandoResposta) return;
+            try {
+                const { data } = await supabaseClient.from('partida_estado').select('*').eq('id', 1).maybeSingle();
+                if (!data) return;
+                if (data.status !== statusPartida || String(data.pergunta_atual_id) !== String(perguntaAtualId)) {
+                    await atualizarEstadoLocal(data);
+                    return;
+                }
+                if (statusPartida === 'aceitando_respostas' && respostaEnviada && !enviandoResposta) {
+                    const { data: resp } = await supabaseClient.from('respostas_rodada').select('alternativa').eq('jogador_id', jogadorAtual.id).eq('pergunta_id', perguntaAtualId).maybeSingle();
+                    if (!resp && !enviandoResposta) liberarRespostaLocal();
+                }
+            } catch (e) {}
         }
 
         function setButtonsEnabled(enabled) {
@@ -615,7 +652,9 @@
         function iniciarMonitorEnergia() {
             if (pollEnergia) clearInterval(pollEnergia);
             if (canalEnergia) supabaseClient.removeChannel(canalEnergia);
-            pollEnergia = setInterval(buscarEnergia, 5000);   // garantia mesmo sem Realtime na tabela
+            pollEnergia = setInterval(buscarEnergia, 5000);
+            if (pollEstado) clearInterval(pollEstado);
+            pollEstado = setInterval(sincronizarEstado, 5000);   // garantia mesmo sem Realtime na tabela
             canalEnergia = supabaseClient.channel('energia_' + jogadorAtual.id + '_' + Date.now())
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jogadores', filter: `id=eq.${jogadorAtual.id}` }, () => buscarEnergia())
                 .subscribe();
@@ -623,6 +662,7 @@
 
         function pararMonitores() {
             if (pollEnergia) { clearInterval(pollEnergia); pollEnergia = null; }
+            if (pollEstado) { clearInterval(pollEstado); pollEstado = null; }
             if (canalEnergia) { supabaseClient.removeChannel(canalEnergia); canalEnergia = null; }
             if (canalBuffs) { supabaseClient.removeChannel(canalBuffs); canalBuffs = null; }
             if (canalPresenca) { supabaseClient.removeChannel(canalPresenca); canalPresenca = null; }
@@ -842,6 +882,12 @@
         }
 
         async function enviarRespostaFinal() {
+            if (enviandoResposta) return;
+            enviandoResposta = true;
+            try { await _enviarRespostaFinal(); } finally { enviandoResposta = false; }
+        }
+
+        async function _enviarRespostaFinal() {
             if (!alternativaSelecionada || respostaEnviada || statusPartida !== 'aceitando_respostas') return;
 
             const alternativa = alternativaSelecionada;
