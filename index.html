@@ -115,6 +115,8 @@
         .buff-icon { font-size: 18px; }
         .buffs-grid .buff-card:last-child:nth-child(3n+1) { grid-column: 1 / -1; }
         .buff-card.sem-energia { opacity: 0.4; }
+        .buff-card.esgotado { opacity: 0.35; filter: grayscale(1); }
+        .buff-usos { font-size: 10px; color: #a0a0c0; font-weight: 700; }
         .btn-answer.correta { outline: 3px solid #2ecc71; box-shadow: 0 0 14px rgba(46,204,113,0.6); }
         .buffs-feed { background: #120e24; border: 1px dashed #362a5f; border-radius: 12px; padding: 8px 10px; display: none; }
         .feed-title { font-size: 11px; color: #a0a0c0; margin-bottom: 6px; }
@@ -242,8 +244,8 @@
                     <div class="buff-card" id="buff-5050" onclick="abrirModalBuff('5050')">
                         <span class="buff-icon">✂️</span><span>50 / 50</span>
                     </div>
-                    <div class="buff-card" id="buff-troca" onclick="abrirModalBuff('troca')">
-                        <span class="buff-icon">🔄</span><span>Troca-Troca</span>
+                    <div class="buff-card" id="buff-congelar" onclick="abrirModalBuff('congelar')">
+                        <span class="buff-icon">❄️</span><span>Congelar</span>
                     </div>
                 </div>
             </div>
@@ -328,14 +330,31 @@
         const ENERGIA_INICIAL = 3;   // ⚡ que um jogador NOVO recebe ao entrar
         const LETRAS = ['A', 'B', 'C', 'D'];
 
+        // ===== LIMITE DE USOS POR SEÇÃO (renova quando o host clica em "Fim de Seção") =====
+        const LIMITES_SECAO = { dobro: 1, vampiro: 2, congelar: 2, escudo: 2, maria: 2, '5050': 2, chute: 3 };
+        let motivoFalha = null;   // 'energia' | 'limite' | 'erro'
+
+        const temColunaUsos = (jog) => !!jog && Object.prototype.hasOwnProperty.call(jog, 'usos_secao');
+        const usosDe = (jog) => (jog && jog.usos_secao && typeof jog.usos_secao === 'object') ? jog.usos_secao : {};
+        // null = limites desligados (a coluna usos_secao não existe no Supabase)
+        function usosRestantes(buff) {
+            if (!temColunaUsos(jogadorAtual)) return null;
+            return Math.max(0, LIMITES_SECAO[buff] - (usosDe(jogadorAtual)[buff] || 0));
+        }
+        function mensagemFalhaBuff(buff) {
+            if (motivoFalha === 'limite') return `Você já usou o ${DICIONARIO_BUFFS[buff].nome} ${LIMITES_SECAO[buff]}x nesta seção. Ele volta quando o host finalizar a seção! 🏁`;
+            if (motivoFalha === 'energia') return "Você está sem energia ⚡!";
+            return "Não consegui usar o buff agora. Tente de novo.";
+        }
+
         const DICIONARIO_BUFFS = {
             'dobro': { icon: '⚡', nome: 'Dobro ou Nada', desc: 'Se você acertar ganha o DOBRO de pontos! Se errar, perde o dobro. Se TODOS acertarem a pergunta, só você pontua (1 pt).', precisaAlvo: false },
-            'escudo': { icon: '🛡️', nome: 'Escudo Protetor', desc: 'Blindagem total: nesta rodada você fica imune a qualquer ataque de outros jogadores (Vampiro, Troca-Troca).', precisaAlvo: false },
+            'escudo': { icon: '🛡️', nome: 'Escudo Protetor', desc: 'Blindagem total: nesta rodada você fica imune a qualquer ataque de outros jogadores (Vampiro, Congelar).', precisaAlvo: false },
             'vampiro': { icon: '🧛', nome: 'Ataque Vampiro', desc: 'Se você acertar a resposta, suga até 5 pontos do jogador que você escolher. O Escudo dele bloqueia.', precisaAlvo: true },
             'maria': { icon: '👯', nome: 'Maria Vai Com As Outras', desc: 'Não sabe a resposta? Copie automaticamente a opção que o alvo escolhido marcar.', precisaAlvo: true },
             'chute': { icon: '🎲', nome: 'Chute Cego', desc: 'O sistema escolherá uma resposta totalmente aleatória para você e enviará imediatamente.', precisaAlvo: false },
             '5050': { icon: '✂️', nome: '50 / 50', desc: 'O sistema removerá duas opções erradas da tela. Sobram só a certa e uma errada: 50% de chance!', precisaAlvo: false },
-            'troca': { icon: '🔄', nome: 'Troca-Troca', desc: 'Se você acertar, troca de pontuação total com o jogador escolhido. Quem está na frente que se cuide! O Escudo do alvo bloqueia.', precisaAlvo: true }
+            'congelar': { icon: '❄️', nome: 'Congelar', desc: 'Se você acertar, ANULA o buff do jogador escolhido (Dobro, Vampiro, Maria...). Como ninguém sabe quem usou o quê, aposte em quem você desconfia! O Escudo dele bloqueia.', precisaAlvo: true }
         };
 
         const TEXTO_NOTIFICACAO = {
@@ -345,7 +364,7 @@
             maria: '👯 Alguém ativou o Maria Vai Com As Outras!',
             chute: '🎲 Alguém apostou tudo no Chute Cego!',
             '5050': '✂️ Alguém usou o 50/50!',
-            troca: '🔄 Alguém ativou o Troca-Troca!'
+            congelar: '❄️ Alguém ativou o Congelar!'
         };
 
         function getAvatarFallback(nome) {
@@ -594,20 +613,41 @@
             if (buffSelecionado || buffDaRodada) label.innerText = `⚡ ${energia} · Buff ativo na rodada!`;
             else label.innerText = `⚡ ${energia} energia`;
             document.querySelectorAll('.buff-card').forEach(c => c.classList.toggle('sem-energia', energia < CUSTO_BUFF));
+            Object.keys(LIMITES_SECAO).forEach(k => {
+                const card = document.getElementById('buff-' + k);
+                if (!card) return;
+                let tag = card.querySelector('.buff-usos');
+                if (!tag) { tag = document.createElement('span'); tag.className = 'buff-usos'; card.appendChild(tag); }
+                const rest = usosRestantes(k);
+                tag.textContent = rest === null ? '' : `${rest}/${LIMITES_SECAO[k]}`;
+                card.classList.toggle('esgotado', rest !== null && rest <= 0);
+            });
         }
 
         // ===== ENERGIA (fonte da verdade = banco) =====
-        async function gastarEnergia() {
+        async function gastarEnergia(buff) {
             versaoEnergia++;
+            motivoFalha = null;
             try {
-                const { data } = await supabaseClient.from('jogadores').select('energia').eq('id', jogadorAtual.id).single();
+                const { data } = await supabaseClient.from('jogadores').select('*').eq('id', jogadorAtual.id).single();
                 const atual = parseInt(data && data.energia) || 0;
-                if (atual < CUSTO_BUFF) { jogadorAtual.energia = atual; return false; }
-                const { error } = await supabaseClient.from('jogadores').update({ energia: atual - CUSTO_BUFF }).eq('id', jogadorAtual.id);
-                if (error) return false;
-                jogadorAtual.energia = atual - CUSTO_BUFF;
+                const comColuna = temColunaUsos(data);
+                const usos = comColuna ? Object.assign({}, usosDe(data)) : {};
+                if (atual < CUSTO_BUFF) { motivoFalha = 'energia'; jogadorAtual.energia = atual; return false; }
+                if (comColuna && buff && (usos[buff] || 0) >= LIMITES_SECAO[buff]) {
+                    motivoFalha = 'limite';
+                    jogadorAtual.usos_secao = usos;
+                    return false;
+                }
+                const novos = { energia: atual - CUSTO_BUFF };
+                if (comColuna && buff) { usos[buff] = (usos[buff] || 0) + 1; novos.usos_secao = usos; }
+                const { error } = await supabaseClient.from('jogadores').update(novos).eq('id', jogadorAtual.id);
+                if (error) { motivoFalha = 'erro'; return false; }
+                jogadorAtual.energia = novos.energia;
+                if (novos.usos_secao) jogadorAtual.usos_secao = novos.usos_secao;
                 return true;
             } catch (e) {
+                motivoFalha = 'erro';
                 return false;
             } finally {
                 versaoEnergia++;
@@ -615,13 +655,19 @@
             }
         }
 
-        async function devolverEnergia() {
+        async function devolverEnergia(buff) {
             versaoEnergia++;
             try {
-                const { data } = await supabaseClient.from('jogadores').select('energia').eq('id', jogadorAtual.id).single();
-                const nova = (parseInt(data && data.energia) || 0) + CUSTO_BUFF;
-                await supabaseClient.from('jogadores').update({ energia: nova }).eq('id', jogadorAtual.id);
-                jogadorAtual.energia = nova;
+                const { data } = await supabaseClient.from('jogadores').select('*').eq('id', jogadorAtual.id).single();
+                const novos = { energia: (parseInt(data && data.energia) || 0) + CUSTO_BUFF };
+                if (temColunaUsos(data) && buff) {
+                    const usos = Object.assign({}, usosDe(data));
+                    usos[buff] = Math.max(0, (usos[buff] || 0) - 1);
+                    novos.usos_secao = usos;
+                }
+                await supabaseClient.from('jogadores').update(novos).eq('id', jogadorAtual.id);
+                jogadorAtual.energia = novos.energia;
+                if (novos.usos_secao) jogadorAtual.usos_secao = novos.usos_secao;
             } catch (e) {} finally {
                 versaoEnergia++;
                 atualizarContadorBuffs();
@@ -633,7 +679,7 @@
             if (!jogadorAtual || !supabaseClient) return;
             const v = versaoEnergia;
             try {
-                const { data, error } = await supabaseClient.from('jogadores').select('energia').eq('id', jogadorAtual.id).maybeSingle();
+                const { data, error } = await supabaseClient.from('jogadores').select('*').eq('id', jogadorAtual.id).maybeSingle();
                 if (v !== versaoEnergia) return;
                 if (!data && !error) {   // o host excluiu este jogador
                     alert("Você foi removido da partida pelo host.");
@@ -645,6 +691,11 @@
                 const antiga = parseInt(jogadorAtual.energia) || 0;
                 jogadorAtual.energia = nova;
                 if (nova > antiga) mostrarToast(`⚡ Você recebeu +${nova - antiga} de energia!`);
+                if (temColunaUsos(data)) {
+                    const tinhaUsos = Object.keys(usosDe(jogadorAtual)).length > 0;
+                    jogadorAtual.usos_secao = usosDe(data);
+                    if (tinhaUsos && Object.keys(jogadorAtual.usos_secao).length === 0) mostrarToast('🏁 Nova seção! Seus buffs foram renovados.');
+                }
                 atualizarContadorBuffs();
             } catch (e) {}
         }
@@ -671,7 +722,7 @@
         // ===== NOTIFICAÇÕES ANÔNIMAS DE BUFF =====
         const NOME_BUFF = {
             dobro: '⚡ Dobro ou Nada', escudo: '🛡️ Escudo', vampiro: '🧛 Vampiro', maria: '👯 Maria Vai Com As Outras',
-            chute: '🎲 Chute Cego', '5050': '✂️ 50/50', troca: '🔄 Troca-Troca'
+            chute: '🎲 Chute Cego', '5050': '✂️ 50/50', congelar: '❄️ Congelar'
         };
 
         function escutarBuffsGlobais() {
@@ -747,7 +798,9 @@
         async function abrirModalBuff(buffKey) {
             if (respostaEnviada || statusPartida !== 'aceitando_respostas') return;
             if (!jogadorAtual) return;
-            if ((parseInt(jogadorAtual.energia) || 0) < CUSTO_BUFF) return alert("Você está sem energia ⚡! Peça ao host ou espere um bônus."); 
+            if ((parseInt(jogadorAtual.energia) || 0) < CUSTO_BUFF) return alert("Você está sem energia ⚡! Peça ao host ou espere um bônus.");
+            const restantes = usosRestantes(buffKey);
+            if (restantes !== null && restantes <= 0) { motivoFalha = 'limite'; return alert(mensagemFalhaBuff(buffKey)); } 
             if (buffSelecionado || buffDaRodada) return alert("Você já escolheu um buff para usar nesta rodada!");
 
             buffEmEdicao = buffKey;
@@ -829,9 +882,9 @@
                 buffDaRodada = null;
                 return alert("Não consegui usar o 50/50 agora (gabarito indisponível). Sua energia não foi gasta.");
             }
-            if (!(await gastarEnergia())) {
+            if (!(await gastarEnergia('5050'))) {
                 buffDaRodada = null;
-                return alert("Você está sem energia ⚡!");
+                return alert(mensagemFalhaBuff('5050'));
             }
             const escondidas = LETRAS.filter(l => l !== correta).sort(() => 0.5 - Math.random()).slice(0, 2);
             aplicar5050(escondidas);
@@ -902,8 +955,8 @@
             buffSelecionado = null;
             alvoSelecionado = null;
 
-            if (buffUsadoNesta && !(await gastarEnergia())) {
-                alert("Sem energia ⚡! Sua resposta foi enviada SEM o buff.");
+            if (buffUsadoNesta && !(await gastarEnergia(buffUsadoNesta))) {
+                alert(mensagemFalhaBuff(buffUsadoNesta) + "\nSua resposta foi enviada SEM o buff.");
                 buffUsadoNesta = null;
                 alvoDesta = null;
                 buffDaRodada = null;
@@ -921,7 +974,7 @@
 
             const { error } = await supabaseClient.from('respostas_rodada').insert([payload]);
             if (error) {
-                if (buffUsadoNesta) await devolverEnergia();
+                if (buffUsadoNesta) await devolverEnergia(buffUsadoNesta);
                 respostaEnviada = false;
                 buffDaRodada = null;
                 setButtonsEnabled(true);
