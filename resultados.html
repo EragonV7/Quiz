@@ -464,12 +464,6 @@ function calcularTotais() {
     TEM_AJUSTE = USAR_OFICIAL && SIM.ordemIds.some(id => AJUSTE[id] !== 0);
 }
 const maxRodada = () => SIM.rodadas.length + (TEM_AJUSTE ? 1 : 0);
-function mudarModo(oficial) {
-    USAR_OFICIAL = !!oficial;
-    pararPlay();
-    processar();
-    renderTudo();
-}
 
 function processar() {
     NOMES = {}; FOTOS = {}; COR = {};
@@ -495,7 +489,6 @@ function renderTudo() {
     }
     const nJog = ORDEM.length, nRod = SIM.rodadas.length;
     const usosTotal = Object.values(STATS).reduce((s, m) => s + m.usos, 0);
-    const divergentes = ORDEM.filter(id => STATS[id].oficial !== (SIM.totais[id] || 0));
 
     document.getElementById('subtitulo').textContent = SNAP
         ? `📌 Resultado salvo em ${new Date(SNAP.salvoEm).toLocaleString('pt-BR')}`
@@ -507,7 +500,6 @@ function renderTudo() {
     el.innerHTML = `
     <section class="painel">
         <h2>Classificação final</h2>
-        ${TEM_DIVERGENCIA ? `<div class="acoes" style="margin:6px 0 4px"><button class="btn ${USAR_OFICIAL ? 'ativo' : ''}" onclick="mudarModo(true)">Placar oficial (o anunciado)</button><button class="btn ${USAR_OFICIAL ? '' : 'ativo'}" onclick="mudarModo(false)">Só o que as regras calculam</button></div>` : ''}
         <div class="resumo">
             <div><b>${nRod}</b><span>perguntas jogadas</span></div>
             <div><b>${nJog}</b><span>jogadores</span></div>
@@ -518,11 +510,8 @@ function renderTudo() {
             const m = STATS[id];
             return `<li>${`<span class="posr">${medalha[i] || (i + 1) + 'º'}</span>`}${avatarHTML(id)}
                 <span class="nm">${esc(m.nome)}<small>${m.acertos} acerto${m.acertos === 1 ? '' : 's'} em ${m.respondidas} · ${m.usos} buff${m.usos === 1 ? '' : 's'}</small></span>
-                <span><span class="pt">${TOTAL[id]} pts</span>${USAR_OFICIAL ? (AJUSTE[id] ? `<span class="dif">inclui ${AJUSTE[id] > 0 ? '+' : '−'}${Math.abs(AJUSTE[id])} de ajustes do host</span>` : '') : (m.oficial !== m.final ? `<span class="dif">placar do painel: ${m.oficial}</span>` : '')}</span></li>`;
+                <span class="pt">${TOTAL[id]} pts</span></li>`;
         }).join('')}</ol>
-        ${divergentes.length ? (USAR_OFICIAL
-            ? `<div class="aviso">ℹ️ Estes são os pontos do painel do host (os que foram anunciados). Reconstruí as rodadas com as regras do jogo e, para ${divergentes.length} jogador${divergentes.length > 1 ? 'es' : ''}, o painel tem pontos a mais ou a menos: foram ajustes feitos à mão (por exemplo, ao corrigir o gabarito). Como não ficam registrados por rodada, aparecem juntos como <b>"Ajustes do host"</b> no fim do gráfico.</div>`
-            : `<div class="aviso">ℹ️ Mostrando só o que as regras calculam a partir das respostas salvas. Para ${divergentes.length} jogador${divergentes.length > 1 ? 'es' : ''} isso é diferente do placar do painel (aparece em cinza ao lado).</div>`) : ''}
         ${SIM.semGabarito.length ? `<div class="aviso">⚠️ Sem gabarito cadastrado para a(s) pergunta(s): ${SIM.semGabarito.map(esc).join(', ')} — elas não entraram na conta.</div>` : ''}
     </section>
 
@@ -659,7 +648,7 @@ function desenharLinha() {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        title: (it) => (it[0].dataIndex === 0 ? 'Início' : (TEM_AJUSTE && it[0].dataIndex === SIM.rodadas.length + 1) ? 'Ajustes manuais do host' : 'Pergunta ' + it[0].label),
+                        title: (it) => (it[0].dataIndex === 0 ? 'Início' : (TEM_AJUSTE && it[0].dataIndex === SIM.rodadas.length + 1) ? 'Rodada final: ajustes do host' : 'Pergunta ' + it[0].label),
                         label: (c) => {
                             const rod = SIM.rodadas[c.dataIndex - 1];
                             const id = c.dataset._id;
@@ -720,12 +709,12 @@ function renderRodada() {
         return;
     }
     if (RODADA > SIM.rodadas.length) {
-        lbl.textContent = 'Ajustes do host';
-        const aj = ORDEM.filter(id => AJUSTE[id] !== 0);
-        box.innerHTML = `<h3>🛠️ Ajustes manuais do host</h3>
-            <div class="res">Pontos dados ou tirados à mão (por exemplo, ao corrigir o gabarito). Não ficam registrados por rodada, então aparecem todos juntos aqui, no fim.</div>
-            <div class="tabwrap"><table><tr><th>Jogador</th><th class="num">Pelas regras</th><th class="num">Ajuste</th><th class="num">Placar final</th></tr>
-            ${aj.map(id => `<tr class="${SEL.has(id) ? 'sel' : ''}"><td>${esc(NOMES[id])}</td><td class="num">${SIM.totais[id] || 0}</td><td class="num">${sinal(AJUSTE[id])}</td><td class="num">${TOTAL[id]}</td></tr>`).join('')}
+        lbl.textContent = 'Rodada final: ajustes do host';
+        const todos = ORDEM.slice().sort((a, b) => (AJUSTE[b] - AJUSTE[a]) || String(NOMES[a]).localeCompare(String(NOMES[b])));
+        box.innerHTML = `<h3>🛠️ Rodada final · ajustes do host</h3>
+            <div class="res">Pontos dados ou tirados à mão pelo host (por exemplo, ao corrigir o gabarito). Como não dá para saber em qual pergunta cada ajuste aconteceu, eles entram juntos aqui, depois da última pergunta, e levam cada jogador à pontuação da classificação.</div>
+            <div class="tabwrap"><table><tr><th>Jogador</th><th class="num">Antes dos ajustes</th><th class="num">Ajuste</th><th class="num">Total</th></tr>
+            ${todos.map(id => `<tr class="${SEL.has(id) ? 'sel' : ''}"><td>${esc(NOMES[id])}</td><td class="num">${SIM.totais[id] || 0}</td><td class="num">${sinal(AJUSTE[id])}</td><td class="num">${TOTAL[id]}</td></tr>`).join('')}
             </table></div>`;
         return;
     }
@@ -871,7 +860,7 @@ function desenharSecoes() {
     }
     document.getElementById('lideres').innerHTML = lideres.join('');
     altura('cx-secao', ids.length);
-    const dsAjuste = TEM_AJUSTE ? [{ label: 'Ajustes do host', data: ids.map(id => AJUSTE[id]), backgroundColor: '#8a8aa8', borderRadius: 4 }] : [];
+    const dsAjuste = TEM_AJUSTE ? [{ label: 'Ajustes do host', data: ids.map(id => AJUSTE[id]), backgroundColor: '#d6c8ff', borderRadius: 4 }] : [];
     const cores = ['#ff0080', '#00f2fe', '#f7971e', '#2ecc71', '#b06bff', '#ffd24d', '#ff6b6b', '#4dabf7'];
     const el = document.getElementById('g-secao');
     if (!el) return;
