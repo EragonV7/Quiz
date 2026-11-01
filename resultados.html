@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Party — Resultados</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+    <style>
+        :root { --bg:#0f0b1e; --card:#1b1535; --card2:#221a3f; --linha:#362a5f; --pink:#ff0080; --cyan:#00f2fe; --purple:#7928ca; --orange:#f7971e; --muted:#a0a0c0; --txt:#ffffff; }
+        * { box-sizing: border-box; }
+        body { margin:0; background:var(--bg); color:var(--txt); font-family:'Poppins',system-ui,sans-serif; line-height:1.45; }
+        .wrap { max-width:1180px; margin:0 auto; padding:20px 16px 70px; }
+        header { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; justify-content:space-between; }
+        h1 { margin:0; font-size:clamp(28px,6vw,48px); font-weight:900; color:var(--pink); letter-spacing:1px; line-height:1.05; }
+        .sub { color:var(--cyan); font-weight:600; margin-top:4px; }
+        .acoes { display:flex; gap:8px; flex-wrap:wrap; }
+        .btn { background:var(--card2); color:#fff; border:1px solid var(--linha); border-radius:10px; padding:9px 14px; font:600 13px 'Poppins',sans-serif; cursor:pointer; }
+        .btn:hover { border-color:var(--cyan); }
+        .btn.ativo { background:var(--purple); border-color:var(--purple); }
+        .painel { background:var(--card); border-radius:20px; padding:20px; margin-top:20px; }
+        .painel > h2, .cartao > h2 { margin:0 0 4px; font-size:19px; font-weight:800; color:var(--cyan); }
+        .nota { color:var(--muted); font-size:13px; margin:0 0 12px; }
+        .grid { display:grid; gap:20px; margin-top:20px; grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr)); }
+        .cartao { background:var(--card); border-radius:20px; padding:20px; min-width:0; }
+        .cx { position:relative; height:300px; }
+        .resumo { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); margin-top:14px; }
+        .resumo div { background:var(--card2); border-radius:14px; padding:10px 14px; }
+        .resumo b { display:block; font-size:24px; color:var(--orange); }
+        .resumo span { font-size:12px; color:var(--muted); }
+        .rank { list-style:none; margin:12px 0 0; padding:0; display:grid; gap:8px; }
+        .rank li { display:flex; align-items:center; gap:12px; background:var(--card2); border-radius:14px; padding:8px 14px; }
+        .rank .posr { width:34px; font-weight:800; text-align:center; font-size:18px; }
+        .rank .nm { flex:1; font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .rank .pt { font-weight:900; color:var(--orange); font-size:18px; }
+        .rank small { display:block; color:var(--muted); font-weight:400; font-size:12px; }
+        .rank .dif { color:var(--muted); font-size:11px; font-weight:400; display:block; text-align:right; }
+        .av { position:relative; display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; flex:none; border-radius:50%; font-weight:800; font-size:14px; color:#120e24; overflow:hidden; }
+        .av img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+        .chips { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+        .chip { display:inline-flex; align-items:center; gap:7px; background:var(--card2); border:2px solid var(--linha); color:#fff; border-radius:999px; padding:4px 12px 4px 4px; font:600 13px 'Poppins',sans-serif; cursor:pointer; opacity:.55; }
+        .chip.on { opacity:1; }
+        .chip .av { width:26px; height:26px; font-size:12px; }
+        .chip small { color:var(--muted); font-weight:400; }
+        .ctrl { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:12px; }
+        .ctrl input[type=range] { flex:1; min-width:140px; accent-color:var(--pink); }
+        .rd { background:var(--card2); border-radius:16px; padding:16px; margin-top:14px; }
+        .rd h3 { margin:0; font-size:18px; }
+        .rd .res { color:var(--muted); font-size:13px; margin:2px 0 10px; }
+        .rd ul { list-style:none; margin:0 0 12px; padding:0; display:grid; gap:6px; }
+        .rd li { background:var(--card); border-radius:10px; padding:7px 12px; font-size:14px; }
+        .tabwrap { overflow-x:auto; }
+        table { width:100%; border-collapse:collapse; font-size:13px; }
+        th { text-align:left; color:var(--muted); font-weight:600; padding:6px 8px; border-bottom:1px solid var(--linha); white-space:nowrap; }
+        td { padding:6px 8px; border-bottom:1px solid rgba(255,255,255,.05); white-space:nowrap; }
+        td.num, th.num { text-align:right; }
+        tr.sel td { background:rgba(121,40,202,.18); }
+        tr.nao td { color:var(--muted); }
+        .pos { color:#2ecc71; font-weight:700; } .neg { color:#ff6b6b; font-weight:700; }
+        .melhor { color:var(--orange); font-weight:800; }
+        .anulado { text-decoration:line-through; color:var(--muted); }
+        .leg { list-style:none; margin:10px 0 0; padding:0; display:grid; gap:4px; font-size:13px; }
+        .leg li { display:flex; align-items:center; gap:8px; }
+        .leg i { width:12px; height:12px; border-radius:3px; flex:none; }
+        .leg b { margin-left:auto; }
+        .secoes-top { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:8px 0 12px; }
+        .secoes-top input { width:70px; background:var(--card2); color:#fff; border:1px solid var(--linha); border-radius:8px; padding:6px 8px; font:600 14px 'Poppins',sans-serif; }
+        .lideres { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); margin-bottom:14px; }
+        .lideres div { background:var(--card2); border-radius:14px; padding:10px 14px; font-size:13px; color:var(--muted); }
+        .lideres b { display:block; color:#fff; font-size:15px; }
+        .regra { display:grid; gap:12px; margin-top:10px; }
+        .regra .ex { background:var(--card2); border-radius:14px; padding:12px 14px; font-size:14px; }
+        .regra .ex h4 { margin:0 0 4px; font-size:14px; color:var(--orange); }
+        .regra code { background:var(--card); border-radius:6px; padding:1px 7px; font-weight:700; color:var(--cyan); }
+        .aviso { background:#2a2208; border:1px solid #6b5a12; color:#ffe58a; border-radius:12px; padding:10px 14px; font-size:13px; margin-top:14px; }
+        .vazio { text-align:center; padding:50px 10px; color:var(--muted); }
+        footer { color:var(--muted); font-size:12px; margin-top:26px; }
+        @media (max-width:520px) { .painel, .cartao { padding:14px; } .cx { height:260px; } }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <header>
+        <div>
+            <h1>🏆 QUIZ PARTY</h1>
+            <div class="sub" id="subtitulo">Resultados e estatísticas da partida</div>
+        </div>
+        <div class="acoes">
+            <button class="btn" id="btn-atualizar" onclick="iniciar()">🔄 Atualizar</button>
+            <button class="btn" id="btn-snapshot" onclick="baixarSnapshot()">💾 Baixar com os dados salvos</button>
+        </div>
+    </header>
+
+    <div id="conteudo"><div class="vazio">Carregando resultados…</div></div>
+
+    <footer id="rodape"></footer>
+</div>
+
+<script>/*SNAPSHOT*/</script>
+<script>
+const SNAP = window.__SNAPSHOT__ || null;
+const SUPABASE_URL = "https://azqtgvonviekeivefqde.supabase.co";
+const SUPABASE_KEY = "sb_publishable_U-C_YPVKJL48zEPdaQQGeg_nrE_F3Jm";
+const supabaseClient = (!SNAP && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+// ===== REGRAS (as mesmas do admin.html) =====
+const PONTOS_MIN = 1, PONTOS_MAX = 10, ROUBO_VAMPIRO = 5, PONTOS_FACIL_COM_DOBRO = 1, PONTOS_CONSOLACAO = 1;
+function valorDaPergunta(acertos, total) {
+    if (total <= 2) return PONTOS_MAX;
+    const erros = total - acertos;
+    return Math.round(PONTOS_MIN + (PONTOS_MAX - PONTOS_MIN) * (erros - 1) / (total - 2));
+}
+
+const BUFFS = {
+    dobro:    { icon: '⚡', nome: 'Dobro ou Nada', cor: '#f7971e' },
+    escudo:   { icon: '🛡️', nome: 'Escudo', cor: '#00f2fe' },
+    vampiro:  { icon: '🧛', nome: 'Vampiro', cor: '#ff0080' },
+    congelar: { icon: '❄️', nome: 'Congelar', cor: '#7fd8ff' },
+    maria:    { icon: '👯', nome: 'Maria Vai Com As Outras', cor: '#b06bff' },
+    chute:    { icon: '🎲', nome: 'Chute Cego', cor: '#2ecc71' },
+    '5050':   { icon: '✂️', nome: '50/50', cor: '#ffd24d' },
+    troca:    { icon: '🔄', nome: 'Troca-Troca (antigo)', cor: '#999999' }
+};
+const PALETA = ['#ff0080','#00f2fe','#f7971e','#2ecc71','#b06bff','#ffd24d','#ff6b6b','#4dabf7','#e599f7','#69db7c','#ffa94d','#74c0fc','#f06595','#a9e34b','#63e6be','#fcc419'];
+
+const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const normLetra = (v) => String(v == null ? '' : v).trim().toUpperCase();
+const nomeBuff = (b) => (BUFFS[b] ? BUFFS[b].nome : String(b));
+const iconeBuff = (b) => (BUFFS[b] ? BUFFS[b].icon : '✨');
+function cmpPergunta(a, b) {
+    const na = Number(a), nb = Number(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return String(a).localeCompare(String(b));
+}
+
+// =====================================================================
+//  SIMULAÇÃO: reconstrói a partida rodada a rodada a partir das respostas salvas
+// =====================================================================
+function simularRodada(q, correta, resp, pts, ordemIds) {
+    const antes = Object.assign({}, pts);
+    const porJogador = {};
+    resp.forEach(r => { porJogador[r.jogador_id] = r; });
+    const eventos = [];
+    const conhecido = (id) => Object.prototype.hasOwnProperty.call(pts, id);
+
+    // ❄️ Congelar (todos avaliados ao mesmo tempo)
+    const congelados = new Map();            // alvo -> [quem congelou]
+    resp.forEach(r => {
+        if (r.buff_usado !== 'congelar' || r.alternativa !== correta || !r.alvo_id) return;
+        const alvo = porJogador[r.alvo_id];
+        if (!alvo) return;
+        let resultado;
+        if (alvo.buff_usado === 'escudo') resultado = 'escudo';
+        else if (!alvo.buff_usado) resultado = 'vazio';
+        else if (alvo.buff_usado === 'chute') resultado = 'chute';
+        else { resultado = 'ok'; if (!congelados.has(alvo.jogador_id)) congelados.set(alvo.jogador_id, []); congelados.get(alvo.jogador_id).push(r.jogador_id); }
+        eventos.push({ t: 'congelar', quem: r.jogador_id, alvo: r.alvo_id, resultado, buff: alvo.buff_usado });
+    });
+    const buffEf = (r) => congelados.has(r.jogador_id) ? null : r.buff_usado;
+
+    // 👯 Maria: segue a corrente até o fim; ciclo = cada um fica com a sua; alvo que não respondeu = para ali
+    const resolverCopia = (r) => {
+        const visto = new Set([r.jogador_id]);
+        let atual = r;
+        while (buffEf(atual) === 'maria' && atual.alvo_id) {
+            const alvo = porJogador[atual.alvo_id];
+            if (!alvo) break;
+            if (visto.has(alvo.jogador_id)) return r.alternativa;
+            visto.add(alvo.jogador_id);
+            atual = alvo;
+        }
+        return atual.alternativa;
+    };
+    resp.forEach(r => { r.altFinal = resolverCopia(r); });
+    resp.forEach(r => {
+        if (buffEf(r) === 'maria' && r.alvo_id && porJogador[r.alvo_id]) {
+            eventos.push({ t: 'maria', quem: r.jogador_id, alvo: r.alvo_id, de: r.alternativa, para: r.altFinal });
+        }
+    });
+
+    const total = resp.length;
+    let acertos = 0;
+    resp.forEach(r => { if (r.altFinal === correta) acertos++; });
+    const modoFacil = total > 0 && acertos === total;
+
+    // linhas por jogador
+    const linhas = {};
+    ordemIds.forEach(id => { linhas[id] = { id, respondeu: false, delta: 0 }; });
+    resp.forEach(r => {
+        if (!conhecido(r.jogador_id)) return;
+        linhas[r.jogador_id] = {
+            id: r.jogador_id, respondeu: true, alt: r.alternativa, altFinal: r.altFinal, buff: r.buff_usado, buffEf: buffEf(r),
+            alvo: r.alvo_id, acertou: r.altFinal === correta, acertouOriginal: r.alternativa === correta,
+            congeladoPor: congelados.get(r.jogador_id) || [], delta: 0,
+            dobroGanho: 0, dobroPerda: 0, vampGanho: 0, vampPerda: 0, mariaGanho: 0, chuteGanho: 0
+        };
+    });
+
+    let modo = 'normal', base = null;
+    const ganhos = {};
+    ordemIds.forEach(id => { ganhos[id] = 0; });
+
+    if (total > 0 && acertos === 0) {
+        modo = 'todos_erraram';
+        const desc = ordemIds.slice().sort((a, b) => pts[b] - pts[a]);        // mesma ordem que o admin vê (pontos desc)
+        const rank = desc.slice().sort((a, b) => pts[a] - pts[b]);            // o admin ordena de novo (crescente)
+        if (rank.length) {
+            pts[rank[0]] += PONTOS_CONSOLACAO;
+            eventos.push({ t: 'consolo', quem: rank[0], valor: PONTOS_CONSOLACAO });
+        }
+    } else if (total > 0) {
+        base = modoFacil ? 0 : valorDaPergunta(acertos, total);
+        modo = modoFacil ? 'facil' : 'normal';
+        const blindado = (id) => !!(porJogador[id] && porJogador[id].buff_usado === 'escudo');
+        const ataqueValido = (r) => r.altFinal === correta && r.alvo_id && conhecido(r.alvo_id) && conhecido(r.jogador_id);
+
+        // 1) pontos da rodada (+ Dobro)
+        if (modoFacil) {
+            const dobradores = resp.filter(r => buffEf(r) === 'dobro' && conhecido(r.jogador_id));
+            dobradores.forEach(r => { ganhos[r.jogador_id] += PONTOS_FACIL_COM_DOBRO; linhas[r.jogador_id].dobroGanho += PONTOS_FACIL_COM_DOBRO; });
+            eventos.push({ t: 'facil', dobradores: dobradores.map(r => r.jogador_id) });
+        } else {
+            resp.forEach(r => {
+                if (!conhecido(r.jogador_id)) return;
+                const L = linhas[r.jogador_id];
+                if (r.altFinal === correta) {
+                    const mult = buffEf(r) === 'dobro' ? 2 : 1;
+                    ganhos[r.jogador_id] += base * mult;
+                    if (mult === 2) L.dobroGanho += base;                                       // só o EXTRA conta como ganho do Dobro
+                    if (buffEf(r) === 'maria' && !L.acertouOriginal) L.mariaGanho += base;       // acertou graças à cópia
+                    if (r.buff_usado === 'chute') L.chuteGanho += base;                          // acertou no chute
+                } else if (buffEf(r) === 'dobro') {
+                    ganhos[r.jogador_id] -= base * 2;
+                    L.dobroPerda += Math.min(base * 2, antes[r.jogador_id]);
+                }
+            });
+        }
+
+        // 2) Vampiro (Escudo bloqueia)
+        resp.forEach(r => {
+            if (buffEf(r) !== 'vampiro' || !ataqueValido(r)) return;
+            const disponivel = modoFacil ? ganhos[r.alvo_id] : antes[r.alvo_id] + ganhos[r.alvo_id];
+            const possivel = Math.min(ROUBO_VAMPIRO, Math.max(0, disponivel));
+            if (blindado(r.alvo_id)) {
+                eventos.push({ t: 'vampiro', quem: r.jogador_id, alvo: r.alvo_id, valor: 0, bloqueado: true, salvou: possivel });
+                return;
+            }
+            ganhos[r.jogador_id] += possivel;
+            ganhos[r.alvo_id] -= possivel;
+            linhas[r.jogador_id].vampGanho += possivel;
+            linhas[r.alvo_id].vampPerda = (linhas[r.alvo_id].vampPerda || 0) + possivel;
+            eventos.push({ t: 'vampiro', quem: r.jogador_id, alvo: r.alvo_id, valor: possivel, bloqueado: false, salvou: 0 });
+        });
+
+        // 3) totais (nunca abaixo de 0)
+        ordemIds.forEach(id => { pts[id] = Math.max(0, antes[id] + ganhos[id]); });
+    }
+
+    const deltas = {};
+    ordemIds.forEach(id => { deltas[id] = pts[id] - antes[id]; linhas[id].delta = deltas[id]; });
+    const rodada = { q, correta, total, acertos, valor: base, modo, eventos, linhas, deltas, totais: Object.assign({}, pts) };
+    rodada.descricoes = descreverRodada(rodada, resp);
+    return rodada;
+}
+
+function simularPartida(jogadores, respostas, gabarito) {
+    const ordemIds = (jogadores || []).map(j => String(j.id));
+    const correta = {};
+    (gabarito || []).forEach(g => { correta[String(g.pergunta_id)] = normLetra(g.resposta_correta); });
+    const porQ = {};
+    (respostas || []).forEach(r => { (porQ[String(r.pergunta_id)] = porQ[String(r.pergunta_id)] || []).push(r); });
+    const perguntas = Object.keys(porQ).sort(cmpPergunta);
+    const semGabarito = perguntas.filter(q => !correta[q]);
+    const pts = {};
+    ordemIds.forEach(id => { pts[id] = 0; });
+    const rodadas = [];
+    perguntas.filter(q => correta[q]).forEach(q => {
+        const resp = porQ[q].map(r => ({
+            jogador_id: String(r.jogador_id), alternativa: normLetra(r.alternativa),
+            buff_usado: r.buff_usado || null, alvo_id: r.alvo_id == null ? null : String(r.alvo_id)
+        }));
+        rodadas.push(simularRodada(q, correta[q], resp, pts, ordemIds));
+    });
+    return { rodadas, totais: Object.assign({}, pts), semGabarito, ordemIds };
+}
+
+// Frases "o que rolou" de cada buff usado na rodada
+function descreverRodada(rod, resp) {
+    const NOME = (id) => `<b>${esc(NOMES[id] || '???')}</b>`;
+    const out = [];
+    resp.forEach(r => {
+        const L = rod.linhas[r.jogador_id];
+        if (!L || !r.buff_usado) return;
+        const b = r.buff_usado, quem = NOME(r.jogador_id), ic = iconeBuff(b), nb = nomeBuff(b);
+        if (L.congeladoPor.length) {
+            const por = L.congeladoPor.map(NOME).join(' e ');
+            out.push({ quem: r.jogador_id, icone: ic, html: `${quem} usou <b>${nb}</b>, mas foi congelado por ${por}: o buff foi <b>anulado</b>.` });
+            return;
+        }
+        if (b === 'dobro') {
+            if (rod.modo === 'facil') out.push({ quem: r.jogador_id, icone: ic, html: `${quem} usou <b>${nb}</b> numa pergunta que todos acertaram: ganhou ${PONTOS_FACIL_COM_DOBRO} pt fixo.` });
+            else if (L.acertou) out.push({ quem: r.jogador_id, icone: ic, html: `${quem} apostou no <b>${nb}</b> e acertou: <span class="pos">+${rod.valor * 2}</span> (em vez de +${rod.valor}).` });
+            else out.push({ quem: r.jogador_id, icone: ic, html: `${quem} apostou no <b>${nb}</b> e errou: <span class="neg">−${L.dobroPerda}</span>.` });
+        } else if (b === 'escudo') {
+            const blocos = rod.eventos.filter(e => (e.t === 'vampiro' && e.bloqueado && e.alvo === r.jogador_id) || (e.t === 'congelar' && e.resultado === 'escudo' && e.alvo === r.jogador_id));
+            if (!blocos.length) out.push({ quem: r.jogador_id, icone: ic, html: `${quem} usou <b>${nb}</b>, mas ninguém o atacou.` });
+            blocos.forEach(e => out.push({ quem: r.jogador_id, icone: ic, html: `${quem} usou <b>${nb}</b> e bloqueou o ${e.t === 'vampiro' ? 'Vampiro' : 'Congelar'} de ${NOME(e.quem)}${e.salvou ? ` (salvou ${e.salvou} pts)` : ''}.` }));
+        } else if (b === 'vampiro') {
+            const e = rod.eventos.find(x => x.t === 'vampiro' && x.quem === r.jogador_id);
+            if (!e) out.push({ quem: r.jogador_id, icone: ic, html: `${quem} usou <b>${nb}</b> em ${NOME(r.alvo_id)}, mas errou a pergunta: nada aconteceu.` });
+            else if (e.bloqueado) out.push({ quem: r.jogador_id, icone: ic, html: `${quem} usou <b>${nb}</b> em ${NOME(e.alvo)}, que estava com <b>Escudo</b>: bloqueado.` });
+            else if (e.valor > 0) out.push({ quem: r.jogador_id, icone: ic, html: `${quem} sugou <span class="pos">${e.valor} pts</span> de ${NOME(e.alvo)}.` });
+            else out.push({ quem: r.jogador_id, icone: ic, html: `${quem} tentou sugar ${NOME(e.alvo)}, mas não havia pontos.` });
+        } else if (b === 'congelar') {
+            const e = rod.eventos.find(x => x.t === 'congelar' && x.quem === r.jogador_id);
+            if (!e) out.push({ quem: r.jogador_id, icone: ic, html: `${quem} usou <b>${nb}</b> em ${NOME(r.alvo_id)}, mas não acertou ou o alvo não respondeu: não valeu.` });
+            else if (e.resultado === 'ok') out.push({ quem: r.jogador_id, icone: ic, html: `${quem} congelou ${NOME(e.alvo)} e anulou o <b>${nomeBuff(e.buff)}</b> dele.` });
+            else if (e.resultado === 'escudo') out.push({ quem: r.jogador_id, icone: ic, html: `${quem} tentou congelar ${NOME(e.alvo)}, mas ele tinha <b>Escudo</b>.` });
+            else if (e.resultado === 'chute') out.push({ quem: r.jogador_id, icone: ic, html: `${quem} congelou ${NOME(e.alvo)}, mas o Chute Cego dele já tinha sido jogado.` });
+            else out.push({ quem: r.jogador_id, icone: ic, html: `${quem} congelou ${NOME(e.alvo)}, mas ele não tinha buff ativo.` });
+        } else if (b === 'maria') {
+            const e = rod.eventos.find(x => x.t === 'maria' && x.quem === r.jogador_id);
+            if (!e) out.push({ quem: r.jogador_id, icone: ic, html: `${quem} tentou copiar ${NOME(r.alvo_id)}, que não respondeu: ficou com a própria letra (${esc(L.alt)}).` });
+            else if (e.de === e.para) out.push({ quem: r.jogador_id, icone: ic, html: `${quem} copiou ${NOME(e.alvo)}: a letra final continuou <code>${esc(e.para)}</code> (${L.acertou ? 'acertou' : 'errou'}).` });
+            else out.push({ quem: r.jogador_id, icone: ic, html: `${quem} copiou ${NOME(e.alvo)}: trocou <code>${esc(e.de)}</code> por <code>${esc(e.para)}</code> e ${L.acertou ? '<span class="pos">acertou</span>' : '<span class="neg">errou</span>'}.` });
+        } else if (b === 'chute') {
+            out.push({ quem: r.jogador_id, icone: ic, html: `${quem} chutou às cegas na letra <code>${esc(L.alt)}</code> e ${L.acertou ? '<span class="pos">acertou</span>' : '<span class="neg">errou</span>'}.` });
+        } else {
+            out.push({ quem: r.jogador_id, icone: ic, html: `${quem} usou <b>${esc(nb)}</b>.` });
+        }
+    });
+    rod.eventos.forEach(e => {
+        if (e.t === 'facil' && !e.dobradores.length) out.push({ quem: null, icone: '😴', html: 'Todos acertaram: ninguém pontuou.' });
+        if (e.t === 'consolo') out.push({ quem: e.quem, icone: '😭', html: `Todos erraram! ${e.valor} pt de consolação para ${NOME(e.quem)}.` });
+    });
+    return out;
+}
+
+// =====================================================================
+//  ESTATÍSTICAS
+// =====================================================================
+function agregar(sim, jogadores) {
+    const M = {};
+    jogadores.forEach(j => {
+        const id = String(j.id);
+        M[id] = {
+            id, nome: j.nome, foto: j.foto_url || '', oficial: parseInt(j.pontos) || 0, final: sim.totais[id] || 0,
+            respondidas: 0, acertos: 0, usos: 0, usosPorBuff: {},
+            dobroGanho: 0, dobroPerda: 0, vampSugou: 0, vampPerdeu: 0, mariaGanho: 0, chuteGanho: 0,
+            congelRecebidos: 0, congelEscudo: 0, congelVazio: 0, congelUsos: 0, congelEfetivos: 0,
+            escudosUsados: 0, escudosBloqueios: 0, escudoSalvou: 0
+        };
+    });
+    sim.rodadas.forEach(rod => {
+        Object.keys(rod.linhas).forEach(id => {
+            const L = rod.linhas[id], m = M[id];
+            if (!m || !L.respondeu) return;
+            m.respondidas++;
+            if (L.acertou) m.acertos++;
+            if (L.buff) { m.usos++; m.usosPorBuff[L.buff] = (m.usosPorBuff[L.buff] || 0) + 1; }
+            if (L.buff === 'escudo') m.escudosUsados++;
+            m.dobroGanho += L.dobroGanho; m.dobroPerda += L.dobroPerda; m.mariaGanho += L.mariaGanho; m.chuteGanho += L.chuteGanho;
+        });
+        rod.eventos.forEach(e => {
+            if (e.t === 'congelar') {
+                if (M[e.quem]) { M[e.quem].congelUsos++; if (e.resultado === 'ok') M[e.quem].congelEfetivos++; }
+                const alvo = M[e.alvo];
+                if (alvo) {
+                    if (e.resultado === 'ok') alvo.congelRecebidos++;
+                    else if (e.resultado === 'escudo') { alvo.congelEscudo++; alvo.escudosBloqueios++; }
+                    else alvo.congelVazio++;
+                }
+            }
+            if (e.t === 'vampiro') {
+                if (e.bloqueado) { if (M[e.alvo]) { M[e.alvo].escudosBloqueios++; M[e.alvo].escudoSalvou += e.salvou; } }
+                else { if (M[e.quem]) M[e.quem].vampSugou += e.valor; if (M[e.alvo]) M[e.alvo].vampPerdeu += e.valor; }
+            }
+        });
+    });
+    Object.values(M).forEach(m => {
+        m.ganhoHabilidade = m.dobroGanho + m.vampSugou + m.mariaGanho + m.chuteGanho;
+    });
+    return M;
+}
+
+function pontosPorSecao(sim, tamanho) {
+    const n = sim.rodadas.length;
+    const nSecoes = Math.max(1, Math.ceil(n / tamanho));
+    const porJogador = {};
+    sim.ordemIds.forEach(id => { porJogador[id] = new Array(nSecoes).fill(0); });
+    sim.rodadas.forEach((rod, i) => {
+        const s = Math.floor(i / tamanho);
+        sim.ordemIds.forEach(id => { porJogador[id][s] += rod.deltas[id]; });
+    });
+    return { nSecoes, porJogador };
+}
+
+// =====================================================================
+//  ESTADO + RENDER
+// =====================================================================
+let DADOS = null, SIM = null, STATS = null, ORDEM = [], COR = {}, NOMES = {}, FOTOS = {};
+let SEL = new Set(), RODADA = 0, VISIVEL = 0, DESTAQUE = null, CH = {}, playTimer = null, tamanhoSecao = 10;
+try { const salvo = parseInt(localStorage.getItem('qp_secao')); if (salvo > 0) tamanhoSecao = salvo; } catch (e) {}
+if (SNAP && SNAP.secao > 0) tamanhoSecao = SNAP.secao;
+
+async function buscarTudo(tabela, ordem, asc) {
+    const todos = [], passo = 1000;
+    for (let ini = 0; ; ini += passo) {
+        let q = supabaseClient.from(tabela).select('*');
+        if (ordem) q = q.order(ordem, { ascending: asc !== false });
+        const { data, error } = await q.range(ini, ini + passo - 1);
+        if (error) throw error;
+        todos.push(...(data || []));
+        if (!data || data.length < passo) break;
+    }
+    return todos;
+}
+
+async function carregarDados() {
+    if (SNAP) return { jogadores: SNAP.jogadores, respostas: SNAP.respostas, gabarito: SNAP.gabarito };
+    if (!supabaseClient) throw new Error('Biblioteca do Supabase não carregou.');
+    const [jogadores, respostas, gabarito] = await Promise.all([
+        buscarTudo('jogadores', 'pontos', false), buscarTudo('respostas_rodada', 'pergunta_id', true), buscarTudo('quiz_gabarito', 'pergunta_id', true)
+    ]);
+    return { jogadores, respostas, gabarito };
+}
+
+function avatarHTML(id) {
+    const nome = NOMES[id] || '?';
+    const foto = FOTOS[id] ? `<img src="${esc(FOTOS[id])}" alt="" onerror="this.remove()">` : '';
+    return `<span class="av" style="background:${COR[id]}">${esc(nome.trim().charAt(0).toUpperCase())}${foto}</span>`;
+}
+function corAlpha(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+}
+const sinal = (n) => (n > 0 ? `<span class="pos">+${n}</span>` : n < 0 ? `<span class="neg">−${Math.abs(n)}</span>` : '<span style="color:var(--muted)">0</span>');
+
+async function iniciar() {
+    pararPlay();
+    document.getElementById('conteudo').innerHTML = '<div class="vazio">Carregando resultados…</div>';
+    try { DADOS = await carregarDados(); }
+    catch (e) {
+        console.error(e);
+        document.getElementById('conteudo').innerHTML = '<div class="vazio">⚠️ Não consegui carregar os dados.<br>O projeto do Supabase pode estar pausado. Se você recebeu o arquivo salvo, abra-o direto.</div>';
+        return;
+    }
+    processar();
+    renderTudo();
+}
+
+function processar() {
+    NOMES = {}; FOTOS = {}; COR = {};
+    DADOS.jogadores.forEach(j => { NOMES[String(j.id)] = j.nome; FOTOS[String(j.id)] = j.foto_url || ''; });
+    SIM = simularPartida(DADOS.jogadores, DADOS.respostas, DADOS.gabarito);
+    STATS = agregar(SIM, DADOS.jogadores);
+    ORDEM = SIM.ordemIds.slice().sort((a, b) => (SIM.totais[b] - SIM.totais[a]) || String(NOMES[a]).localeCompare(String(NOMES[b])));
+    ORDEM.forEach((id, i) => { COR[id] = PALETA[i % PALETA.length]; });
+    SEL = new Set(ORDEM.slice(0, 5));
+    RODADA = SIM.rodadas.length; VISIVEL = RODADA; DESTAQUE = null;
+}
+
+function destruirGraficos() { Object.keys(CH).forEach(k => { try { CH[k].destroy(); } catch (e) {} }); CH = {}; }
+function criar(id, cfg) { CH[id] = new Chart(document.getElementById(id).getContext('2d'), cfg); return CH[id]; }
+
+function renderTudo() {
+    destruirGraficos();
+    const el = document.getElementById('conteudo');
+    if (!SIM.rodadas.length) {
+        el.innerHTML = '<div class="vazio">Nenhuma resposta encontrada.<br>Se o jogo foi resetado, os dados foram apagados — use o arquivo salvo ("💾 Baixar com os dados salvos") para guardar uma partida.</div>';
+        return;
+    }
+    const nJog = ORDEM.length, nRod = SIM.rodadas.length;
+    const usosTotal = Object.values(STATS).reduce((s, m) => s + m.usos, 0);
+    const divergentes = ORDEM.filter(id => STATS[id].oficial !== STATS[id].final);
+
+    document.getElementById('subtitulo').textContent = SNAP
+        ? `📌 Resultado salvo em ${new Date(SNAP.salvoEm).toLocaleString('pt-BR')}`
+        : 'Resultados e estatísticas da partida';
+    document.getElementById('btn-snapshot').style.display = SNAP ? 'none' : '';
+    document.getElementById('btn-atualizar').style.display = SNAP ? 'none' : '';
+
+    const medalha = ['🥇', '🥈', '🥉'];
+    el.innerHTML = `
+    <section class="painel">
+        <h2>Classificação final</h2>
+        <div class="resumo">
+            <div><b>${nRod}</b><span>perguntas jogadas</span></div>
+            <div><b>${nJog}</b><span>jogadores</span></div>
+            <div><b>${usosTotal}</b><span>buffs usados</span></div>
+            <div><b>${esc(NOMES[ORDEM[0]])}</b><span>campeão(ã)</span></div>
+        </div>
+        <ol class="rank" style="padding:0">${ORDEM.map((id, i) => {
+            const m = STATS[id];
+            return `<li>${`<span class="posr">${medalha[i] || (i + 1) + 'º'}</span>`}${avatarHTML(id)}
+                <span class="nm">${esc(m.nome)}<small>${m.acertos} acerto${m.acertos === 1 ? '' : 's'} em ${m.respondidas} · ${m.usos} buff${m.usos === 1 ? '' : 's'}</small></span>
+                <span><span class="pt">${m.final} pts</span>${m.oficial !== m.final ? `<span class="dif">placar do painel: ${m.oficial}</span>` : ''}</span></li>`;
+        }).join('')}</ol>
+        ${divergentes.length ? `<div class="aviso">ℹ️ Os pontos desta página são recalculados a partir das respostas salvas, com as regras atuais. Para ${divergentes.length} jogador${divergentes.length > 1 ? 'es' : ''} o placar do painel é diferente (ajustes manuais do host ou regras antigas) — aparece em cinza ao lado.</div>` : ''}
+        ${SIM.semGabarito.length ? `<div class="aviso">⚠️ Sem gabarito cadastrado para a(s) pergunta(s): ${SIM.semGabarito.map(esc).join(', ')} — elas não entraram na conta.</div>` : ''}
+    </section>
+
+    <section class="painel">
+        <h2>📈 Evolução da pontuação</h2>
+        <p class="nota">Escolha os jogadores, clique em um ponto do gráfico (ou use a barra / as setas do teclado) para ver o que rolou em cada rodada.</p>
+        <div class="acoes" style="margin-bottom:6px">
+            <button class="btn" onclick="selecionar('todos')">Todos</button>
+            <button class="btn" onclick="selecionar('top5')">Top 5</button>
+            <button class="btn" onclick="selecionar('nenhum')">Limpar</button>
+        </div>
+        <div class="chips" id="chips"></div>
+        <div class="cx" style="height:380px"><canvas id="g-linha"></canvas></div>
+        <div class="ctrl">
+            <button class="btn" id="btn-play" onclick="alternarPlay()">▶ Reproduzir a partida</button>
+            <button class="btn" onclick="irRodada(RODADA-1)">◀</button>
+            <input type="range" id="slider" min="0" max="${nRod}" value="${nRod}" oninput="irRodada(+this.value)">
+            <button class="btn" onclick="irRodada(RODADA+1)">▶</button>
+            <span id="lbl-rodada" class="nota" style="margin:0"></span>
+        </div>
+        <div class="rd" id="detalhe"></div>
+    </section>
+
+    <div class="grid">
+        <div class="cartao"><h2>🎯 Maiores acertos</h2><p class="nota">Quantas perguntas cada um acertou (contando a resposta que valeu depois de cópias).</p><div class="cx" id="cx-acertos"><canvas id="g-acertos"></canvas></div></div>
+        <div class="cartao"><h2>🧪 Quem mais usou habilidades</h2><p class="nota">Total de buffs usados por jogador. O 50/50 não fica registrado pelo jogo, então não entra na conta.</p><div class="cx"><canvas id="g-usos"></canvas></div><ul class="leg" id="leg-usos"></ul></div>
+        <div class="cartao"><h2>💰 Quem mais ganhou ponto com habilidades</h2><p class="nota">Dobro (o extra), Vampiro (pontos sugados), Maria (acerto graças à cópia) e Chute Cego (acerto no chute).</p><div class="cx"><canvas id="g-ganho"></canvas></div><ul class="leg" id="leg-ganho"></ul></div>
+        <div class="cartao"><h2>🧮 Detalhe dos pontos por habilidade</h2><p class="nota">De onde veio cada ponto.</p><div class="tabwrap" id="tab-ganho"></div></div>
+        <div class="cartao"><h2>❄️ Congelamentos recebidos</h2><p class="nota">Vezes em que alguém acertou e anulou o buff do jogador. Tentativas bloqueadas por Escudo ou em vão aparecem ao passar o mouse.</p><div class="cx" id="cx-congel"><canvas id="g-congel"></canvas></div></div>
+        <div class="cartao"><h2>🛡️ Escudos</h2><p class="nota">Escudos usados e ataques que eles realmente bloquearam (Vampiro ou Congelar).</p><div class="cx" id="cx-escudo"><canvas id="g-escudo"></canvas></div><div id="txt-escudo" class="nota" style="margin-top:8px"></div></div>
+        <div class="cartao"><h2>🧛 Pontos por Vampiro</h2><p class="nota">Pontos sugados por quem usou o Vampiro e pontos perdidos por quem foi mordido.</p><div class="cx" id="cx-vamp"><canvas id="g-vamp"></canvas></div></div>
+        <div class="cartao"><h2>⚡ Pontos por Dobro ou Nada</h2><p class="nota">Quanto o Dobro rendeu a mais e quanto custou quando o jogador errou.</p><div class="cx" id="cx-dobro"><canvas id="g-dobro"></canvas></div></div>
+    </div>
+
+    <section class="painel">
+        <h2>🏁 Pontuação por seção</h2>
+        <p class="nota">Saldo de pontos de cada jogador dentro da seção. Pode ficar <b>negativo</b> quando o jogador perde mais pontos (Vampiro, Dobro errado) do que ganha.</p>
+        <div class="secoes-top"><span class="nota" style="margin:0">Perguntas por seção:</span><input type="number" id="in-secao" min="1" value="${tamanhoSecao}" onchange="mudarSecao(this.value)"><span class="nota" style="margin:0" id="lbl-secoes"></span></div>
+        <div class="lideres" id="lideres"></div>
+        <div class="cx" id="cx-secao"><canvas id="g-secao"></canvas></div>
+        <div class="tabwrap" id="tab-secao" style="margin-top:12px"></div>
+    </section>
+
+    <section class="painel">
+        <h2>👯 Como funciona a Maria Vai Com As Outras</h2>
+        <p class="nota">A resposta que vale é a que está no <b>final da corrente</b> de cópias. Quem copia herda o acerto (ou o erro) de quem copiou.</p>
+        <div class="regra">
+            <div class="ex"><h4>Copiou alguém que ACERTOU</h4>Ana marcou <code>B</code> e usou Maria em Bia. Bia marcou <code>C</code> e a certa era <code>C</code>. Ana fica com <code>C</code>: <b>acertou</b> e pontua como quem acertou.</div>
+            <div class="ex"><h4>Copiou alguém que ERROU</h4>Ana usou Maria em Bia, que marcou <code>A</code> (a certa era <code>C</code>). Ana fica com <code>A</code>: <b>errou</b> e não pontua — mesmo que a letra que ela tinha marcado fosse a certa.</div>
+            <div class="ex"><h4>Copiou quem também copiou (corrente)</h4>Caio copia Ana, Ana copia Bia, e Bia marcou <code>C</code>. A cópia segue até o fim: <b>os três ficam com a resposta da Bia</b>. Se a Bia acertou, os três acertaram; se ela errou, os três erraram.</div>
+            <div class="ex"><h4>Copiaram um ao outro (ciclo)</h4>Ana copia Bia e Bia copia Ana: ninguém copia ninguém. <b>Cada um fica com a letra que marcou.</b></div>
+            <div class="ex"><h4>O alvo não respondeu</h4>Sem resposta para copiar, você fica com a letra que marcou. Numa corrente, a cópia para no último jogador que respondeu.</div>
+            <div class="ex"><h4>Maria congelada ❄️</h4>Se alguém acertar e congelar quem usou Maria, a cópia é <b>cancelada</b>: a pessoa fica com a letra que marcou.</div>
+            <div class="ex"><h4>Efeito no valor da pergunta</h4>Copiar conta como acerto (ou erro) na hora de calcular a pergunta: mais acertos deixam a pergunta valendo menos — e se, com as cópias, <b>todos</b> acertarem, ninguém pontua (só quem usou Dobro ganha 1 pt).</div>
+        </div>
+    </section>`;
+
+    renderChips();
+    desenharLinha();
+    renderRodada();
+    desenharEstatisticas();
+    desenharSecoes();
+    document.getElementById('rodape').textContent = SNAP
+        ? 'Dados congelados no momento em que o arquivo foi salvo.'
+        : 'Pontos reconstruídos rodada a rodada a partir das respostas salvas e das regras atuais do jogo.';
+}
+
+// ---------- chips + linha ----------
+function renderChips() {
+    document.getElementById('chips').innerHTML = ORDEM.map(id => {
+        const on = SEL.has(id);
+        return `<button class="chip ${on ? 'on' : ''}" style="border-color:${on ? COR[id] : 'var(--linha)'}" data-id="${esc(id)}" onclick="alternarJogador('${esc(id)}')" onmouseenter="destacar('${esc(id)}')" onmouseleave="destacar(null)">${avatarHTML(id)}${esc(NOMES[id])} <small>${SIM.totais[id]}</small></button>`;
+    }).join('');
+}
+function alternarJogador(id) { if (SEL.has(id)) SEL.delete(id); else SEL.add(id); renderChips(); atualizarLinha(); renderRodada(); }
+function selecionar(modo) {
+    SEL = new Set(modo === 'todos' ? ORDEM : modo === 'top5' ? ORDEM.slice(0, 5) : []);
+    renderChips(); atualizarLinha(); renderRodada();
+}
+function destacar(id) { DESTAQUE = id; atualizarLinha('none'); }
+
+function serie(id) {
+    const base = [0].concat(SIM.rodadas.map(r => r.totais[id]));
+    return base.map((v, i) => (i <= VISIVEL ? v : null));
+}
+function datasetsLinha() {
+    return ORDEM.filter(id => SEL.has(id)).map(id => {
+        const dim = DESTAQUE && DESTAQUE !== id;
+        return {
+            label: NOMES[id], _id: id, data: serie(id), borderColor: dim ? corAlpha(COR[id], .25) : COR[id], backgroundColor: COR[id],
+            borderWidth: DESTAQUE === id ? 6 : 3, tension: .25, pointRadius: 3, pointHoverRadius: 7, spanGaps: false
+        };
+    });
+}
+const pluginSecoes = {
+    id: 'secoes',
+    afterDatasetsDraw(chart) {
+        const n = SIM ? SIM.rodadas.length : 0, t = tamanhoSecao;
+        if (!n || t >= n) return;
+        const { ctx, chartArea, scales } = chart;
+        ctx.save();
+        ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = '11px sans-serif';
+        for (let k = 1; k * t < n; k++) {
+            const x = scales.x.getPixelForValue(k * t + 0.5);
+            ctx.beginPath(); ctx.moveTo(x, chartArea.top); ctx.lineTo(x, chartArea.bottom); ctx.stroke();
+            ctx.fillText('Seção ' + (k + 1), x + 4, chartArea.top + 12);
+        }
+        ctx.restore();
+    }
+};
+const pluginRodadaSel = {
+    id: 'rodadaSel',
+    beforeDatasetsDraw(chart) {
+        if (!RODADA) return;
+        const { ctx, chartArea, scales } = chart;
+        const x = scales.x.getPixelForValue(RODADA);
+        ctx.save(); ctx.fillStyle = 'rgba(255,0,128,.12)'; ctx.fillRect(x - 12, chartArea.top, 24, chartArea.bottom - chartArea.top);
+        ctx.strokeStyle = 'rgba(255,0,128,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, chartArea.top); ctx.lineTo(x, chartArea.bottom); ctx.stroke(); ctx.restore();
+    }
+};
+function baseEscala() {
+    return {
+        grid: { color: 'rgba(255,255,255,.07)' }, ticks: { color: '#a0a0c0' }
+    };
+}
+function desenharLinha() {
+    criar('g-linha', {
+        type: 'line',
+        data: { labels: ['Início'].concat(SIM.rodadas.map(r => r.q)), datasets: datasetsLinha() },
+        options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: (it) => (it[0].dataIndex === 0 ? 'Início' : 'Pergunta ' + it[0].label),
+                        label: (c) => {
+                            const rod = SIM.rodadas[c.dataIndex - 1];
+                            const id = c.dataset._id;
+                            const d = rod ? rod.deltas[id] : 0;
+                            const b = rod && rod.linhas[id] && rod.linhas[id].buff ? ' ' + iconeBuff(rod.linhas[id].buff) : '';
+                            return `${c.dataset.label}: ${c.parsed.y} pts${rod ? ` (${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d)})` : ''}${b}`;
+                        },
+                        footer: () => 'Clique para ver a rodada'
+                    }
+                }
+            },
+            scales: {
+                x: Object.assign(baseEscala(), { title: { display: true, text: 'Pergunta', color: '#a0a0c0' } }),
+                y: Object.assign(baseEscala(), { beginAtZero: true, title: { display: true, text: 'Pontos', color: '#a0a0c0' } })
+            },
+            onClick: (e, els, chart) => {
+                const pts = chart.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                if (pts.length) { pararPlay(); VISIVEL = SIM.rodadas.length; irRodada(pts[0].index); }
+            }
+        },
+        plugins: [pluginSecoes, pluginRodadaSel]
+    });
+}
+function atualizarLinha(modo) {
+    const c = CH['g-linha'];
+    if (!c) return;
+    c.data.datasets = datasetsLinha();
+    c.update(modo || undefined);
+}
+
+// ---------- rodada selecionada ----------
+function irRodada(n) {
+    const max = SIM.rodadas.length;
+    RODADA = Math.max(0, Math.min(max, n));
+    const s = document.getElementById('slider'); if (s) s.value = RODADA;
+    atualizarLinha('none');
+    renderRodada();
+}
+document.addEventListener('keydown', (e) => {
+    if (!SIM || /INPUT|TEXTAREA/.test((e.target.tagName || ''))) return;
+    if (e.key === 'ArrowLeft') irRodada(RODADA - 1);
+    if (e.key === 'ArrowRight') irRodada(RODADA + 1);
+});
+
+function textoModo(rod) {
+    if (rod.modo === 'facil') return 'todos acertaram: ninguém pontua (só quem usou Dobro ganha 1 pt)';
+    if (rod.modo === 'todos_erraram') return 'todos erraram: 1 pt de consolação para o último colocado';
+    return `a pergunta valeu <b>${rod.valor} pt${rod.valor === 1 ? '' : 's'}</b>`;
+}
+function renderRodada() {
+    const box = document.getElementById('detalhe');
+    const lbl = document.getElementById('lbl-rodada');
+    if (!box) return;
+    if (RODADA === 0) {
+        lbl.textContent = 'Início';
+        box.innerHTML = '<div class="nota" style="margin:0">Todos começam com 0 pontos. Clique em uma pergunta no gráfico para ver o que aconteceu.</div>';
+        return;
+    }
+    const rod = SIM.rodadas[RODADA - 1];
+    lbl.textContent = `Pergunta ${rod.q} (${RODADA}/${SIM.rodadas.length})`;
+    const linhas = ORDEM.map(id => rod.linhas[id]).sort((a, b) => (b.delta - a.delta) || String(NOMES[a.id]).localeCompare(String(NOMES[b.id])));
+    const desc = rod.descricoes.length ? `<ul>${rod.descricoes.map(d => `<li>${d.icone} ${d.html}</li>`).join('')}</ul>` : '<div class="nota">Nenhum buff foi usado nesta rodada.</div>';
+    box.innerHTML = `
+        <h3>Pergunta ${esc(rod.q)} · resposta correta <span style="color:var(--cyan)">${esc(rod.correta)}</span></h3>
+        <div class="res">${rod.acertos} de ${rod.total} acertaram · ${textoModo(rod)}</div>
+        ${desc}
+        <div class="tabwrap"><table>
+            <tr><th>Jogador</th><th>Resposta</th><th>Buff</th><th class="num">Rodada</th><th class="num">Total</th></tr>
+            ${linhas.map(L => {
+                const sel = SEL.has(L.id) ? 'sel' : '', nao = L.respondeu ? '' : 'nao';
+                let resp = '—', buff = '';
+                if (L.respondeu) {
+                    resp = L.alt === L.altFinal ? esc(L.alt) : `<span class="anulado">${esc(L.alt)}</span> ➜ ${esc(L.altFinal)}`;
+                    resp += L.acertou ? ' ✅' : ' ❌';
+                    if (L.buff) {
+                        const alvo = L.alvo && NOMES[L.alvo] ? ` → ${esc(NOMES[L.alvo])}` : '';
+                        buff = `<span class="${L.congeladoPor.length ? 'anulado' : ''}">${iconeBuff(L.buff)} ${esc(nomeBuff(L.buff))}${alvo}</span>${L.congeladoPor.length ? ' ❄️' : ''}`;
+                    }
+                }
+                return `<tr class="${sel} ${nao}"><td>${esc(NOMES[L.id])}</td><td>${resp}</td><td>${buff}</td><td class="num">${sinal(L.delta)}</td><td class="num">${rod.totais[L.id]}</td></tr>`;
+            }).join('')}
+        </table></div>`;
+}
+
+// ---------- reproduzir ----------
+function pararPlay() {
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+    const b = document.getElementById('btn-play'); if (b) { b.textContent = '▶ Reproduzir a partida'; b.classList.remove('ativo'); }
+}
+function alternarPlay() {
+    if (playTimer) { pararPlay(); VISIVEL = SIM.rodadas.length; atualizarLinha(); return; }
+    const n = SIM.rodadas.length;
+    VISIVEL = 0; RODADA = 0; irRodada(0);
+    const b = document.getElementById('btn-play'); b.textContent = '⏸ Pausar'; b.classList.add('ativo');
+    playTimer = setInterval(() => {
+        if (!playTimer) return;
+        VISIVEL = Math.min(n, VISIVEL + 1);
+        irRodada(VISIVEL);
+        atualizarLinha();
+        if (VISIVEL >= n) pararPlay();
+    }, 900);
+}
+
+// ---------- estatísticas ----------
+function opcoesBarra(horizontal, extra) {
+    const o = {
+        responsive: true, maintainAspectRatio: false, indexAxis: horizontal ? 'y' : 'x',
+        plugins: { legend: { display: false } },
+        scales: { x: baseEscala(), y: baseEscala() }
+    };
+    const eixoValor = horizontal ? 'x' : 'y';
+    o.scales[eixoValor].beginAtZero = true;
+    o.scales[eixoValor].ticks = { color: '#a0a0c0', precision: 0 };
+    return Object.assign(o, extra || {});
+}
+function altura(id, n) { const e = document.getElementById(id); if (e) e.style.height = Math.max(240, 30 * n + 70) + 'px'; }
+function legenda(idUl, ids, valorFn, sufixo) {
+    const total = ids.reduce((s, id) => s + valorFn(id), 0) || 1;
+    document.getElementById(idUl).innerHTML = ids.map(id => `<li><i style="background:${COR[id]}"></i>${esc(NOMES[id])}<b>${valorFn(id)} ${sufixo} · ${Math.round(100 * valorFn(id) / total)}%</b></li>`).join('');
+}
+
+function desenharEstatisticas() {
+    const ids = ORDEM.slice();
+    const N = ids.length;
+
+    // acertos
+    const porAcertos = ids.slice().sort((a, b) => STATS[b].acertos - STATS[a].acertos || String(NOMES[a]).localeCompare(String(NOMES[b])));
+    altura('cx-acertos', N);
+    criar('g-acertos', { type: 'bar', data: { labels: porAcertos.map(id => NOMES[id]), datasets: [{ data: porAcertos.map(id => STATS[id].acertos), backgroundColor: porAcertos.map(id => COR[id]), borderRadius: 6 }] },
+        options: opcoesBarra(true, { plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => { const m = STATS[porAcertos[c.dataIndex]]; return `${m.acertos} de ${m.respondidas} (${m.respondidas ? Math.round(100 * m.acertos / m.respondidas) : 0}%)`; } } } } }) });
+
+    // pizza: usos
+    const comUso = ids.filter(id => STATS[id].usos > 0).sort((a, b) => STATS[b].usos - STATS[a].usos);
+    criar('g-usos', { type: 'pie', data: { labels: comUso.map(id => NOMES[id]), datasets: [{ data: comUso.map(id => STATS[id].usos), backgroundColor: comUso.map(id => COR[id]), borderColor: '#1b1535', borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+    legenda('leg-usos', comUso, id => STATS[id].usos, 'usos');
+
+    // pizza: ganho por habilidade
+    const comGanho = ids.filter(id => STATS[id].ganhoHabilidade > 0).sort((a, b) => STATS[b].ganhoHabilidade - STATS[a].ganhoHabilidade);
+    criar('g-ganho', { type: 'pie', data: { labels: comGanho.map(id => NOMES[id]), datasets: [{ data: comGanho.map(id => STATS[id].ganhoHabilidade), backgroundColor: comGanho.map(id => COR[id]), borderColor: '#1b1535', borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+    legenda('leg-ganho', comGanho, id => STATS[id].ganhoHabilidade, 'pts');
+    document.getElementById('tab-ganho').innerHTML = `<table><tr><th>Jogador</th><th class="num">⚡ Dobro</th><th class="num">🧛 Vampiro</th><th class="num">👯 Maria</th><th class="num">🎲 Chute</th><th class="num">Total</th></tr>${
+        ids.slice().sort((a, b) => STATS[b].ganhoHabilidade - STATS[a].ganhoHabilidade).map(id => { const m = STATS[id]; return `<tr><td>${esc(m.nome)}</td><td class="num">${m.dobroGanho}</td><td class="num">${m.vampSugou}</td><td class="num">${m.mariaGanho}</td><td class="num">${m.chuteGanho}</td><td class="num"><b>${m.ganhoHabilidade}</b></td></tr>`; }).join('')}</table>`;
+
+    // congelamentos recebidos
+    const porCongel = ids.slice().sort((a, b) => STATS[b].congelRecebidos - STATS[a].congelRecebidos || String(NOMES[a]).localeCompare(String(NOMES[b])));
+    altura('cx-congel', N);
+    criar('g-congel', { type: 'bar', data: { labels: porCongel.map(id => NOMES[id]), datasets: [{ label: 'Congelamentos que anularam um buff', data: porCongel.map(id => STATS[id].congelRecebidos), backgroundColor: '#7fd8ff', borderRadius: 6 }] },
+        options: opcoesBarra(true, { plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: (c) => { const m = STATS[porCongel[c.dataIndex]]; return `Bloqueados por Escudo: ${m.congelEscudo} · Em vão (sem buff): ${m.congelVazio}`; } } } } }) });
+
+    // escudos
+    const porEscudo = ids.slice().sort((a, b) => STATS[b].escudosUsados - STATS[a].escudosUsados || STATS[b].escudosBloqueios - STATS[a].escudosBloqueios);
+    altura('cx-escudo', N);
+    criar('g-escudo', { type: 'bar', data: { labels: porEscudo.map(id => NOMES[id]), datasets: [
+        { label: 'Escudos usados', data: porEscudo.map(id => STATS[id].escudosUsados), backgroundColor: '#00f2fe', borderRadius: 6 },
+        { label: 'Ataques bloqueados', data: porEscudo.map(id => STATS[id].escudosBloqueios), backgroundColor: '#2ecc71', borderRadius: 6 }] },
+        options: opcoesBarra(true, { plugins: { legend: { display: true, labels: { color: '#fff' } } } }) });
+    const salvos = ids.reduce((s, id) => s + STATS[id].escudoSalvou, 0);
+    document.getElementById('txt-escudo').textContent = `Os escudos salvaram ${salvos} ponto${salvos === 1 ? '' : 's'} de Vampiros ao todo.`;
+
+    // vampiro
+    const porVamp = ids.slice().sort((a, b) => STATS[b].vampSugou - STATS[a].vampSugou || STATS[b].vampPerdeu - STATS[a].vampPerdeu);
+    altura('cx-vamp', N);
+    criar('g-vamp', { type: 'bar', data: { labels: porVamp.map(id => NOMES[id]), datasets: [
+        { label: 'Pontos sugados', data: porVamp.map(id => STATS[id].vampSugou), backgroundColor: '#ff0080', borderRadius: 6 },
+        { label: 'Pontos perdidos para Vampiros', data: porVamp.map(id => STATS[id].vampPerdeu), backgroundColor: '#6b5a8a', borderRadius: 6 }] },
+        options: opcoesBarra(true, { plugins: { legend: { display: true, labels: { color: '#fff' } } } }) });
+
+    // dobro
+    const porDobro = ids.slice().sort((a, b) => STATS[b].dobroGanho - STATS[a].dobroGanho || STATS[b].dobroPerda - STATS[a].dobroPerda);
+    altura('cx-dobro', N);
+    criar('g-dobro', { type: 'bar', data: { labels: porDobro.map(id => NOMES[id]), datasets: [
+        { label: 'Pontos ganhos pelo Dobro (extra)', data: porDobro.map(id => STATS[id].dobroGanho), backgroundColor: '#f7971e', borderRadius: 6 },
+        { label: 'Pontos perdidos no Dobro', data: porDobro.map(id => STATS[id].dobroPerda), backgroundColor: '#ff6b6b', borderRadius: 6 }] },
+        options: opcoesBarra(true, { plugins: { legend: { display: true, labels: { color: '#fff' } } } }) });
+}
+
+// ---------- seções ----------
+function mudarSecao(v) {
+    const n = parseInt(v);
+    if (!(n > 0)) return;
+    tamanhoSecao = n;
+    try { localStorage.setItem('qp_secao', String(n)); } catch (e) {}
+    if (CH['g-secao']) { CH['g-secao'].destroy(); delete CH['g-secao']; }
+    desenharSecoes();
+    atualizarLinha('none');
+}
+function desenharSecoes() {
+    const { nSecoes, porJogador } = pontosPorSecao(SIM, tamanhoSecao);
+    const ids = ORDEM.slice();
+    document.getElementById('lbl-secoes').textContent = `${nSecoes} seç${nSecoes === 1 ? 'ão' : 'ões'} · ${SIM.rodadas.length} perguntas`;
+    const lideres = [];
+    for (let s = 0; s < nSecoes; s++) {
+        const max = Math.max(...ids.map(id => porJogador[id][s]));
+        const quem = ids.filter(id => porJogador[id][s] === max && max > 0);
+        lideres.push(`<div>Seção ${s + 1}<b>${quem.length ? quem.map(id => esc(NOMES[id])).join(', ') : '—'}</b>${max > 0 ? max + ' pts' : 'sem pontos'}</div>`);
+    }
+    document.getElementById('lideres').innerHTML = lideres.join('');
+    altura('cx-secao', ids.length);
+    const cores = ['#ff0080', '#00f2fe', '#f7971e', '#2ecc71', '#b06bff', '#ffd24d', '#ff6b6b', '#4dabf7'];
+    const el = document.getElementById('g-secao');
+    if (!el) return;
+    criar('g-secao', {
+        type: 'bar',
+        data: { labels: ids.map(id => NOMES[id]), datasets: Array.from({ length: nSecoes }, (_, s) => ({ label: 'Seção ' + (s + 1), data: ids.map(id => porJogador[id][s]), backgroundColor: cores[s % cores.length], borderRadius: 4 })) },
+        options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { labels: { color: '#fff' } } },
+            scales: { x: Object.assign(baseEscala(), { stacked: true, beginAtZero: true }), y: Object.assign(baseEscala(), { stacked: true }) } }
+    });
+    document.getElementById('tab-secao').innerHTML = `<table><tr><th>Jogador</th>${Array.from({ length: nSecoes }, (_, s) => `<th class="num">Seção ${s + 1}</th>`).join('')}<th class="num">Total</th></tr>${
+        ids.map(id => `<tr><td>${esc(NOMES[id])}</td>${porJogador[id].map((v, s) => {
+            const max = Math.max(...ids.map(j => porJogador[j][s]));
+            return `<td class="num ${v === max && max > 0 ? 'melhor' : ''}">${v}</td>`;
+        }).join('')}<td class="num"><b>${SIM.totais[id]}</b></td></tr>`).join('')}</table>`;
+}
+
+// ---------- salvar uma cópia com os dados ----------
+async function baixarSnapshot() {
+    try {
+        const url = location.href.split('#')[0].split('?')[0];
+        const origem = await (await fetch(url, { cache: 'no-store' })).text();
+        const dados = JSON.stringify({ salvoEm: new Date().toISOString(), secao: tamanhoSecao, jogadores: DADOS.jogadores, respostas: DADOS.respostas, gabarito: DADOS.gabarito }).replace(/</g, '\\u003c');
+        if (origem.indexOf('/*SNAPSHOT*/') < 0) throw new Error('marcador não encontrado');
+        const html = origem.replace('/*SNAPSHOT*/', () => 'window.__SNAPSHOT__ = ' + dados + ';');
+        const blob = new Blob([html], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = 'resultado-quiz-party.html';
+        document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) {
+        console.error(e);
+        alert('Não consegui gerar o arquivo. Abra esta página pelo link publicado (GitHub Pages) e tente de novo.');
+    }
+}
+
+iniciar();
+</script>
+</body>
+</html>
